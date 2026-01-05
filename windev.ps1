@@ -28,11 +28,11 @@ function Get-LatestRelease {
 function RedirectToLatestPreRelease {
     $latestRelease = Get-LatestRelease
     if ($latestRelease) {
-        $url = "https://github.com/ChrisTitusTech/winutil/releases/download/$latestRelease/winutil.ps1"
+        $url = "https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1"
     } else {
         Write-Host 'No pre-release version found. This is most likely because the latest release is a full release and no newer pre-release exists.' -ForegroundColor Yellow
         Write-Host "Using latest Full Release"
-        $url = "https://github.com/ChrisTitusTech/winutil/releases/latest/download/winutil.ps1"
+        $url = "https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1"
     }
 
     $script = Invoke-RestMethod $url
