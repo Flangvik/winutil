@@ -355,15 +355,8 @@ $sync["Form"].Add_ContentRendered({
             Write-Host "Selected apps after import: $($sync.selectedApps -join ', ')" -ForegroundColor Cyan
         }
         if ($PARAM_RUN) {
-            # Wait for any existing process to complete before starting
-            while ($sync.ProcessRunning) {
-                Start-Sleep -Seconds 5
-            }
-            Start-Sleep -Seconds 5
-
             Write-Host "Installing applications..."
             Write-Host "Selected apps count: $($sync.selectedApps.Count)"
-            Write-Host "ProcessRunning status: $($sync.ProcessRunning)" -ForegroundColor Yellow
             if ($sync.selectedApps.Count -gt 0) {
                 # Remove duplicates from selectedApps (in case Invoke-WPFPresets added them)
                 $uniqueApps = $sync.selectedApps | Select-Object -Unique
@@ -386,54 +379,24 @@ $sync["Form"].Add_ContentRendered({
                 }
                 Write-Host "Packages to install count: $($packagesToInstall.Count)" -ForegroundColor Green
 
-                # Wait a bit more to ensure ProcessRunning is cleared
-                $waitCount = 0
-                while ($sync.ProcessRunning -and $waitCount -lt 10) {
-                    Write-Host "Waiting for process to complete... ($waitCount/10)" -ForegroundColor Yellow
-                    Start-Sleep -Seconds 2
-                    $waitCount++
-                }
-
-                # Force reset ProcessRunning if it's still stuck after waiting
-                if ($sync.ProcessRunning) {
-                    Write-Host "WARNING: ProcessRunning is still true after waiting. Force resetting..." -ForegroundColor Yellow
-                    $sync.ProcessRunning = $false
-                    Start-Sleep -Seconds 2
-                }
-
                 if ($packagesToInstall.Count -gt 0) {
-                    if (-not $sync.ProcessRunning) {
-                        Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
-                        # In run mode, Invoke-WPFInstall executes synchronously, so no waiting needed
-                        Invoke-WPFInstall -PackagesToInstall $packagesToInstall
-                    } else {
-                        Write-Host "ERROR: ProcessRunning is still true after force reset. Cannot install packages." -ForegroundColor Red
-                    }
+                    Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
+                    Invoke-WPFInstall -PackagesToInstall $packagesToInstall
                 } else {
                     Write-Host "WARNING: No packages to install (packages list is empty)" -ForegroundColor Yellow
                 }
             } else {
                 Write-Host "WARNING: No applications selected in config file"
             }
-            Start-Sleep -Seconds 5
+            Start-Sleep -Seconds 2
 
             Write-Host "Applying tweaks..."
-            if (-not $sync.ProcessRunning) {
-                Invoke-WPFtweaksbutton
-                while ($sync.ProcessRunning) {
-                    Start-Sleep -Seconds 5
-                }
-            }
-            Start-Sleep -Seconds 5
+            Invoke-WPFtweaksbutton
+            Start-Sleep -Seconds 2
 
             Write-Host "Installing features..."
-            if (-not $sync.ProcessRunning) {
-                Invoke-WPFFeatureInstall
-                while ($sync.ProcessRunning) {
-                    Start-Sleep -Seconds 5
-                }
-            }
-            Start-Sleep -Seconds 5
+            Invoke-WPFFeatureInstall
+            Start-Sleep -Seconds 2
 
             Write-Host "Done."
         }
