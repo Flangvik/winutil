@@ -53,13 +53,13 @@ function Invoke-WPFInstall {
     Write-Host "Package names: $($PackagesToInstall.Content -join ', ')" -ForegroundColor Cyan
 
     $ManagerPreference = $sync["ManagerPreference"]
-    
+
     # In run mode, execute directly instead of using async runspace
     $isRunMode = $sync.PARAM_RUN -eq $true
-    
+
     if ($isRunMode) {
         Write-Host "Run mode detected - executing installation directly (synchronously)..." -ForegroundColor Green
-        
+
         $packagesSorted = Get-WinUtilSelectedPackages -PackageList $PackagesToInstall -Preference $ManagerPreference
 
         $packagesWinget = $packagesSorted[[PackageManagers]::Winget]

@@ -7045,12 +7045,11 @@ function Invoke-WPFInstall {
 
     $ManagerPreference = $sync["ManagerPreference"]
 
-    Write-Host "Starting installation runspace..." -ForegroundColor Cyan
+    # In run mode, execute directly instead of using async runspace
+    $isRunMode = $sync.PARAM_RUN -eq $true
 
-    Invoke-WPFRunspace -ParameterList @(("PackagesToInstall", $PackagesToInstall),("ManagerPreference", $ManagerPreference)) -DebugPreference $DebugPreference -ScriptBlock {
-        param($PackagesToInstall, $ManagerPreference, $DebugPreference)
-
-        Write-Host "Installation runspace started. Processing packages..." -ForegroundColor Green
+    if ($isRunMode) {
+        Write-Host "Run mode detected - executing installation directly (synchronously)..." -ForegroundColor Green
 
         $packagesSorted = Get-WinUtilSelectedPackages -PackageList $PackagesToInstall -Preference $ManagerPreference
 
@@ -7061,9 +7060,8 @@ function Invoke-WPFInstall {
 
         try {
             $sync.ProcessRunning = $true
-            Write-Host "ProcessRunning set to true. Beginning installations..." -ForegroundColor Green
+            Write-Host "Beginning installations..." -ForegroundColor Green
             if($packagesWinget.Count -gt 0 -and $packagesWinget -ne "0") {
-                Show-WPFInstallAppBusy -text "Installing apps..."
                 Install-WinUtilWinget
                 Install-WinUtilProgramWinget -Action Install -Programs $packagesWinget
             }
@@ -7071,18 +7069,58 @@ function Invoke-WPFInstall {
                 Install-WinUtilChoco
                 Install-WinUtilProgramChoco -Action Install -Programs $packagesChoco
             }
-            Hide-WPFInstallAppBusy
             Write-Host "==========================================="
             Write-Host "--      Installs have finished          ---"
             Write-Host "==========================================="
-            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "None" -overlay "checkmark" })
         } catch {
             Write-Host "==========================================="
             Write-Host "Error: $_"
             Write-Host "==========================================="
-            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Error" -overlay "warning" })
+        } finally {
+            $sync.ProcessRunning = $False
+            Write-Host "Installation process completed." -ForegroundColor Green
         }
-        $sync.ProcessRunning = $False
+    } else {
+        # GUI mode - use async runspace
+        Write-Host "GUI mode - starting installation runspace..." -ForegroundColor Cyan
+
+        Invoke-WPFRunspace -ParameterList @(("PackagesToInstall", $PackagesToInstall),("ManagerPreference", $ManagerPreference)) -DebugPreference $DebugPreference -ScriptBlock {
+            param($PackagesToInstall, $ManagerPreference, $DebugPreference)
+
+            Write-Host "Installation runspace started. Processing packages..." -ForegroundColor Green
+
+            $packagesSorted = Get-WinUtilSelectedPackages -PackageList $PackagesToInstall -Preference $ManagerPreference
+
+            $packagesWinget = $packagesSorted[[PackageManagers]::Winget]
+            $packagesChoco = $packagesSorted[[PackageManagers]::Choco]
+
+            Write-Host "Winget packages: $($packagesWinget.Count), Choco packages: $($packagesChoco.Count)" -ForegroundColor Cyan
+
+            try {
+                $sync.ProcessRunning = $true
+                Write-Host "ProcessRunning set to true. Beginning installations..." -ForegroundColor Green
+                if($packagesWinget.Count -gt 0 -and $packagesWinget -ne "0") {
+                    Show-WPFInstallAppBusy -text "Installing apps..."
+                    Install-WinUtilWinget
+                    Install-WinUtilProgramWinget -Action Install -Programs $packagesWinget
+                }
+                if($packagesChoco.Count -gt 0) {
+                    Install-WinUtilChoco
+                    Install-WinUtilProgramChoco -Action Install -Programs $packagesChoco
+                }
+                Hide-WPFInstallAppBusy
+                Write-Host "==========================================="
+                Write-Host "--      Installs have finished          ---"
+                Write-Host "==========================================="
+                $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "None" -overlay "checkmark" })
+            } catch {
+                Write-Host "==========================================="
+                Write-Host "Error: $_"
+                Write-Host "==========================================="
+                $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Error" -overlay "warning" })
+            }
+            $sync.ProcessRunning = $False
+        }
     }
 }
 function Invoke-WPFInstallUpgrade {
@@ -16816,6 +16854,9 @@ $InitialSessionState = [System.Management.Automation.Runspaces.InitialSessionSta
 # Add the variable to the session state
 $InitialSessionState.Variables.Add($hashVars)
 
+# Store PARAM_RUN in sync so functions can access it
+$sync.PARAM_RUN = $PARAM_RUN
+
 # Get every private function and add them to the session state
 $functions = Get-ChildItem function:\ | Where-Object { $_.Name -imatch 'winutil|Microwin|WPF' }
 foreach ($function in $functions) {
@@ -17156,24 +17197,6 @@ $sync["Form"].Add_ContentRendered({
             }
             Start-Sleep -Seconds 5
 
-            Write-Host "Applying tweaks..."
-            if (-not $sync.ProcessRunning) {
-                Invoke-WPFtweaksbutton
-                while ($sync.ProcessRunning) {
-                    Start-Sleep -Seconds 5
-                }
-            }
-            Start-Sleep -Seconds 5
-
-            Write-Host "Installing features..."
-            if (-not $sync.ProcessRunning) {
-                Invoke-WPFFeatureInstall
-                while ($sync.ProcessRunning) {
-                    Start-Sleep -Seconds 5
-                }
-            }
-            Start-Sleep -Seconds 5
-
             Write-Host "Installing applications..."
             Write-Host "Selected apps count: $($sync.selectedApps.Count)"
             Write-Host "ProcessRunning status: $($sync.ProcessRunning)" -ForegroundColor Yellow
@@ -17217,26 +17240,8 @@ $sync["Form"].Add_ContentRendered({
                 if ($packagesToInstall.Count -gt 0) {
                     if (-not $sync.ProcessRunning) {
                         Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
+                        # In run mode, Invoke-WPFInstall executes synchronously, so no waiting needed
                         Invoke-WPFInstall -PackagesToInstall $packagesToInstall
-
-                        # Wait for the runspace to start and set ProcessRunning to true
-                        $startWaitCount = 0
-                        while (-not $sync.ProcessRunning -and $startWaitCount -lt 5) {
-                            Write-Host "Waiting for installation to start... ($startWaitCount/5)" -ForegroundColor Yellow
-                            Start-Sleep -Seconds 1
-                            $startWaitCount++
-                        }
-
-                        # Now wait for the installation to complete
-                        if ($sync.ProcessRunning) {
-                            Write-Host "Installation started. Waiting for completion..." -ForegroundColor Green
-                            while ($sync.ProcessRunning) {
-                                Start-Sleep -Seconds 2
-                            }
-                            Write-Host "Installation completed." -ForegroundColor Green
-                        } else {
-                            Write-Host "WARNING: Installation did not start. ProcessRunning never became true." -ForegroundColor Yellow
-                        }
                     } else {
                         Write-Host "ERROR: ProcessRunning is still true after force reset. Cannot install packages." -ForegroundColor Red
                     }
@@ -17245,6 +17250,24 @@ $sync["Form"].Add_ContentRendered({
                 }
             } else {
                 Write-Host "WARNING: No applications selected in config file"
+            }
+            Start-Sleep -Seconds 5
+
+            Write-Host "Applying tweaks..."
+            if (-not $sync.ProcessRunning) {
+                Invoke-WPFtweaksbutton
+                while ($sync.ProcessRunning) {
+                    Start-Sleep -Seconds 5
+                }
+            }
+            Start-Sleep -Seconds 5
+
+            Write-Host "Installing features..."
+            if (-not $sync.ProcessRunning) {
+                Invoke-WPFFeatureInstall
+                while ($sync.ProcessRunning) {
+                    Start-Sleep -Seconds 5
+                }
             }
             Start-Sleep -Seconds 5
 
