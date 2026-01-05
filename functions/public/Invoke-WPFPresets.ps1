@@ -51,8 +51,8 @@ function Invoke-WPFPresets {
 
         if (-not $CheckBoxesToCheck) {
             $sync.$checkboxName.IsChecked = $false
-            # If it's a WPFInstall checkbox, also remove from selectedApps
-            if ($checkboxName -like "WPFInstall*") {
+            # If it's a WPFInstall checkbox, also remove from selectedApps (unless skipWPFInstall is true)
+            if ($checkboxName -like "WPFInstall*" -and -not $skipWPFInstall) {
                 # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
                 # This matches what's stored in applicationsHashtable
                 $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
@@ -110,8 +110,8 @@ function Invoke-WPFPresets {
             # If it doesn't exist, set IsChecked to false
             $sync.$checkboxName.IsChecked = $false
             Write-Debug "$checkboxName is not checked"
-            # If it's a WPFInstall checkbox, also remove from selectedApps
-            if ($checkboxName -like "WPFInstall*") {
+            # If it's a WPFInstall checkbox, also remove from selectedApps (unless skipWPFInstall is true)
+            if ($checkboxName -like "WPFInstall*" -and -not $skipWPFInstall) {
                 # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
                 # This matches what's stored in applicationsHashtable
                 $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
