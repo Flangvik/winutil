@@ -558,7 +558,7 @@ function Microwin-NewFirstRun {
         Write-Log "Configuration file detected at: $env:HOMEDRIVE\winutil-config.json"
         Write-Host "Configuration file detected. Applying..."
         Write-Log "Executing winutil config file"
-        iex "& { $(irm https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1) } -Config `"$env:HOMEDRIVE\winutil-config.json`" -Run"
+        iex "& { $(irm "https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1?t=$(Get-Date -Format 'yyyyMMddHHmmss')") } -Config `"$env:HOMEDRIVE\winutil-config.json`" -Run"
         Write-Log "Winutil config execution completed"
     } else {
         Write-Log "No configuration file found at: $env:HOMEDRIVE\winutil-config.json"

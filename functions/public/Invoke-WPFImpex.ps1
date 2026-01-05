@@ -125,8 +125,12 @@ function Invoke-WPFImpex {
                         Write-Host "WARNING: No WPFInstall property found in config file or it's empty" -ForegroundColor Yellow
                     }
 
-                    $flattenedJson = $jsonFile.PSObject.Properties.Where({ $_.Name -ne "Install" -and $_.Name -ne "ManagerPreference" }).ForEach({ $_.Value })
-                    Invoke-WPFPresets -preset $flattenedJson -imported $true
+                    Write-Host "Before Invoke-WPFPresets - selectedApps count: $($sync.selectedApps.Count)" -ForegroundColor Cyan
+                    $flattenedJson = $jsonFile.PSObject.Properties.Where({ $_.Name -ne "Install" -and $_.Name -ne "ManagerPreference" -and $_.Name -ne "WPFInstall" }).ForEach({ $_.Value })
+                    # Skip WPFInstall processing since we already populated selectedApps from config
+                    $skipWPFInstall = $jsonFile.PSObject.Properties.Name -contains "WPFInstall" -and $jsonFile.WPFInstall
+                    Invoke-WPFPresets -preset $flattenedJson -imported $true -skipWPFInstall $skipWPFInstall
+                    Write-Host "After Invoke-WPFPresets - selectedApps count: $($sync.selectedApps.Count)" -ForegroundColor Cyan
                 }
             } catch {
                 Write-Error "An error occurred while importing: $_"

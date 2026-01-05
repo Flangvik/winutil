@@ -67,7 +67,7 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     $script = if ($PSCommandPath) {
         "& { & `'$($PSCommandPath)`' $($argList -join ' ') }"
     } else {
-        "&([ScriptBlock]::Create((irm https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1))) $($argList -join ' ')"
+        "&([ScriptBlock]::Create((irm `"https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1?t=$(Get-Date -Format 'yyyyMMddHHmmss')`"))) $($argList -join ' ')"
     }
 
     $powershellCmd = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
@@ -1916,7 +1916,7 @@ function Microwin-NewFirstRun {
         Write-Log "Configuration file detected at: $env:HOMEDRIVE\winutil-config.json"
         Write-Host "Configuration file detected. Applying..."
         Write-Log "Executing winutil config file"
-        iex "& { $(irm https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1) } -Config `"$env:HOMEDRIVE\winutil-config.json`" -Run"
+        iex "& { $(irm "https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1?t=$(Get-Date -Format 'yyyyMMddHHmmss')") } -Config `"$env:HOMEDRIVE\winutil-config.json`" -Run"
         Write-Log "Winutil config execution completed"
     } else {
         Write-Log "No configuration file found at: $env:HOMEDRIVE\winutil-config.json"
@@ -6483,21 +6483,30 @@ function Invoke-WPFFeatureInstall {
     Invoke-WPFRunspace -ArgumentList $Features -DebugPreference $DebugPreference -ScriptBlock {
         param($Features, $DebugPreference)
         $sync.ProcessRunning = $true
-        if ($Features.count -eq 1) {
-            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Indeterminate" -value 0.01 -overlay "logo" })
-        } else {
-            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Normal" -value 0.01 -overlay "logo" })
+        try {
+            if ($Features.count -eq 1) {
+                $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Indeterminate" -value 0.01 -overlay "logo" })
+            } else {
+                $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Normal" -value 0.01 -overlay "logo" })
+            }
+
+            Invoke-WinUtilFeatureInstall $Features
+
+            Write-Host "==================================="
+            Write-Host "---   Features are Installed    ---"
+            Write-Host "---  A Reboot may be required   ---"
+            Write-Host "==================================="
+        } catch {
+            Write-Host "==================================="
+            Write-Host "ERROR: Feature installation failed: $_" -ForegroundColor Red
+            Write-Host "==================================="
+            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Error" -overlay "warning" })
+        } finally {
+            # Always reset ProcessRunning, even if there was an error
+            $sync.ProcessRunning = $false
+            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "None" -overlay "checkmark" })
+            Write-Host "Feature installation process completed. ProcessRunning reset to false." -ForegroundColor Green
         }
-
-        Invoke-WinUtilFeatureInstall $Features
-
-        $sync.ProcessRunning = $false
-        $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "None" -overlay "checkmark" })
-
-        Write-Host "==================================="
-        Write-Host "---   Features are Installed    ---"
-        Write-Host "---  A Reboot may be required   ---"
-        Write-Host "==================================="
     }
 }
 function Invoke-WPFFixesNetwork {
@@ -6965,8 +6974,12 @@ function Invoke-WPFImpex {
                         Write-Host "WARNING: No WPFInstall property found in config file or it's empty" -ForegroundColor Yellow
                     }
 
-                    $flattenedJson = $jsonFile.PSObject.Properties.Where({ $_.Name -ne "Install" -and $_.Name -ne "ManagerPreference" }).ForEach({ $_.Value })
-                    Invoke-WPFPresets -preset $flattenedJson -imported $true
+                    Write-Host "Before Invoke-WPFPresets - selectedApps count: $($sync.selectedApps.Count)" -ForegroundColor Cyan
+                    $flattenedJson = $jsonFile.PSObject.Properties.Where({ $_.Name -ne "Install" -and $_.Name -ne "ManagerPreference" -and $_.Name -ne "WPFInstall" }).ForEach({ $_.Value })
+                    # Skip WPFInstall processing since we already populated selectedApps from config
+                    $skipWPFInstall = $jsonFile.PSObject.Properties.Name -contains "WPFInstall" -and $jsonFile.WPFInstall
+                    Invoke-WPFPresets -preset $flattenedJson -imported $true -skipWPFInstall $skipWPFInstall
+                    Write-Host "After Invoke-WPFPresets - selectedApps count: $($sync.selectedApps.Count)" -ForegroundColor Cyan
                 }
             } catch {
                 Write-Error "An error occurred while importing: $_"
@@ -7209,7 +7222,10 @@ function Invoke-WPFPresets {
         [bool]$imported = $false,
 
         [Parameter(position=2)]
-        [string]$checkboxfilterpattern = "**"
+        [string]$checkboxfilterpattern = "**",
+
+        [Parameter(position=3)]
+        [bool]$skipWPFInstall = $false
     )
 
     if ($imported -eq $true) {
@@ -7256,8 +7272,8 @@ function Invoke-WPFPresets {
             # If it exists, set IsChecked to true
             $sync.$checkboxName.IsChecked = $true
             Write-Debug "$checkboxName is checked"
-            # If it's a WPFInstall checkbox, also add to selectedApps
-            if ($checkboxName -like "WPFInstall*") {
+            # If it's a WPFInstall checkbox, also add to selectedApps (unless skipWPFInstall is true)
+            if ($checkboxName -like "WPFInstall*" -and -not $skipWPFInstall) {
                 # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
                 # This matches what's stored in applicationsHashtable
                 $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
@@ -7267,21 +7283,26 @@ function Invoke-WPFPresets {
                     $checkboxName
                 }
                 if ($appKey) {
-                    # Ensure selectedApps is a List[string] and check for duplicates properly
+                    # Ensure selectedApps is a List[string]
                     if (-not $sync.selectedApps) {
                         $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
                     }
-                    # Convert to string list if needed for proper comparison
-                    $currentApps = @($sync.selectedApps | ForEach-Object { [string]$_ })
-                    if (-not ($currentApps -contains [string]$appKey)) {
-                        $sync.selectedApps.Add([string]$appKey)
-                        # Sort but keep as List[string]
-                        $sortedApps = $sync.selectedApps | Sort-Object
-                        $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
-                        foreach ($app in $sortedApps) {
-                            $sync.selectedApps.Add([string]$app)
+                    # Check for duplicates by converting both to strings and comparing
+                    $appKeyStr = [string]$appKey
+                    $isDuplicate = $false
+                    foreach ($existingApp in $sync.selectedApps) {
+                        if ([string]$existingApp -eq $appKeyStr) {
+                            $isDuplicate = $true
+                            break
                         }
                     }
+                    if (-not $isDuplicate) {
+                        $sync.selectedApps.Add($appKeyStr)
+                        Write-Debug "Invoke-WPFPresets: Added app key to selectedApps: $appKeyStr"
+                    } else {
+                        Write-Debug "Invoke-WPFPresets: Skipped duplicate app key: $appKeyStr"
+                    }
+                    # Sort but keep as List[string] - only do this once at the end, not for each addition
                 }
             }
         } else {
@@ -7307,6 +7328,16 @@ function Invoke-WPFPresets {
 
     # Update the selected apps button count if any WPFInstall checkboxes were modified
     if ($CheckBoxes | Where-Object { $_.Key -like "WPFInstall*" }) {
+        # Final deduplication and sorting of selectedApps
+        if ($sync.selectedApps -and $sync.selectedApps.Count -gt 0) {
+            $uniqueApps = $sync.selectedApps | Select-Object -Unique | Sort-Object
+            $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+            foreach ($app in $uniqueApps) {
+                $sync.selectedApps.Add([string]$app)
+            }
+            Write-Debug "Invoke-WPFPresets: Final selectedApps count after deduplication: $($sync.selectedApps.Count)"
+        }
+
         $count = $sync.selectedApps.Count
         if ($sync.WPFselectedAppsButton) {
             $sync.WPFselectedAppsButton.Content = "Selected Apps: $count"
@@ -17152,6 +17183,13 @@ $sync["Form"].Add_ContentRendered({
                     $waitCount++
                 }
 
+                # Force reset ProcessRunning if it's still stuck after waiting
+                if ($sync.ProcessRunning) {
+                    Write-Host "WARNING: ProcessRunning is still true after waiting. Force resetting..." -ForegroundColor Yellow
+                    $sync.ProcessRunning = $false
+                    Start-Sleep -Seconds 2
+                }
+
                 if ($packagesToInstall.Count -gt 0) {
                     if (-not $sync.ProcessRunning) {
                         Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
@@ -17160,7 +17198,7 @@ $sync["Form"].Add_ContentRendered({
                             Start-Sleep -Seconds 1
                         }
                     } else {
-                        Write-Host "ERROR: ProcessRunning is still true after waiting. Cannot install packages." -ForegroundColor Red
+                        Write-Host "ERROR: ProcessRunning is still true after force reset. Cannot install packages." -ForegroundColor Red
                     }
                 } else {
                     Write-Host "WARNING: No packages to install (packages list is empty)" -ForegroundColor Yellow

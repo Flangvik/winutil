@@ -23,7 +23,10 @@ function Invoke-WPFPresets {
         [bool]$imported = $false,
 
         [Parameter(position=2)]
-        [string]$checkboxfilterpattern = "**"
+        [string]$checkboxfilterpattern = "**",
+
+        [Parameter(position=3)]
+        [bool]$skipWPFInstall = $false
     )
 
     if ($imported -eq $true) {
@@ -70,8 +73,8 @@ function Invoke-WPFPresets {
             # If it exists, set IsChecked to true
             $sync.$checkboxName.IsChecked = $true
             Write-Debug "$checkboxName is checked"
-            # If it's a WPFInstall checkbox, also add to selectedApps
-            if ($checkboxName -like "WPFInstall*") {
+            # If it's a WPFInstall checkbox, also add to selectedApps (unless skipWPFInstall is true)
+            if ($checkboxName -like "WPFInstall*" -and -not $skipWPFInstall) {
                 # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
                 # This matches what's stored in applicationsHashtable
                 $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
@@ -81,21 +84,26 @@ function Invoke-WPFPresets {
                     $checkboxName
                 }
                 if ($appKey) {
-                    # Ensure selectedApps is a List[string] and check for duplicates properly
+                    # Ensure selectedApps is a List[string]
                     if (-not $sync.selectedApps) {
                         $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
                     }
-                    # Convert to string list if needed for proper comparison
-                    $currentApps = @($sync.selectedApps | ForEach-Object { [string]$_ })
-                    if (-not ($currentApps -contains [string]$appKey)) {
-                        $sync.selectedApps.Add([string]$appKey)
-                        # Sort but keep as List[string]
-                        $sortedApps = $sync.selectedApps | Sort-Object
-                        $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
-                        foreach ($app in $sortedApps) {
-                            $sync.selectedApps.Add([string]$app)
+                    # Check for duplicates by converting both to strings and comparing
+                    $appKeyStr = [string]$appKey
+                    $isDuplicate = $false
+                    foreach ($existingApp in $sync.selectedApps) {
+                        if ([string]$existingApp -eq $appKeyStr) {
+                            $isDuplicate = $true
+                            break
                         }
                     }
+                    if (-not $isDuplicate) {
+                        $sync.selectedApps.Add($appKeyStr)
+                        Write-Debug "Invoke-WPFPresets: Added app key to selectedApps: $appKeyStr"
+                    } else {
+                        Write-Debug "Invoke-WPFPresets: Skipped duplicate app key: $appKeyStr"
+                    }
+                    # Sort but keep as List[string] - only do this once at the end, not for each addition
                 }
             }
         } else {
@@ -121,6 +129,16 @@ function Invoke-WPFPresets {
 
     # Update the selected apps button count if any WPFInstall checkboxes were modified
     if ($CheckBoxes | Where-Object { $_.Key -like "WPFInstall*" }) {
+        # Final deduplication and sorting of selectedApps
+        if ($sync.selectedApps -and $sync.selectedApps.Count -gt 0) {
+            $uniqueApps = $sync.selectedApps | Select-Object -Unique | Sort-Object
+            $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+            foreach ($app in $uniqueApps) {
+                $sync.selectedApps.Add([string]$app)
+            }
+            Write-Debug "Invoke-WPFPresets: Final selectedApps count after deduplication: $($sync.selectedApps.Count)"
+        }
+
         $count = $sync.selectedApps.Count
         if ($sync.WPFselectedAppsButton) {
             $sync.WPFselectedAppsButton.Content = "Selected Apps: $count"
