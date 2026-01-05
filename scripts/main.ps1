@@ -420,8 +420,24 @@ $sync["Form"].Add_ContentRendered({
                     if (-not $sync.ProcessRunning) {
                         Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
                         Invoke-WPFInstall -PackagesToInstall $packagesToInstall
-                        while ($sync.ProcessRunning) {
+
+                        # Wait for the runspace to start and set ProcessRunning to true
+                        $startWaitCount = 0
+                        while (-not $sync.ProcessRunning -and $startWaitCount -lt 5) {
+                            Write-Host "Waiting for installation to start... ($startWaitCount/5)" -ForegroundColor Yellow
                             Start-Sleep -Seconds 1
+                            $startWaitCount++
+                        }
+
+                        # Now wait for the installation to complete
+                        if ($sync.ProcessRunning) {
+                            Write-Host "Installation started. Waiting for completion..." -ForegroundColor Green
+                            while ($sync.ProcessRunning) {
+                                Start-Sleep -Seconds 2
+                            }
+                            Write-Host "Installation completed." -ForegroundColor Green
+                        } else {
+                            Write-Host "WARNING: Installation did not start. ProcessRunning never became true." -ForegroundColor Yellow
                         }
                     } else {
                         Write-Host "ERROR: ProcessRunning is still true after force reset. Cannot install packages." -ForegroundColor Red

@@ -7045,16 +7045,23 @@ function Invoke-WPFInstall {
 
     $ManagerPreference = $sync["ManagerPreference"]
 
+    Write-Host "Starting installation runspace..." -ForegroundColor Cyan
+
     Invoke-WPFRunspace -ParameterList @(("PackagesToInstall", $PackagesToInstall),("ManagerPreference", $ManagerPreference)) -DebugPreference $DebugPreference -ScriptBlock {
         param($PackagesToInstall, $ManagerPreference, $DebugPreference)
+
+        Write-Host "Installation runspace started. Processing packages..." -ForegroundColor Green
 
         $packagesSorted = Get-WinUtilSelectedPackages -PackageList $PackagesToInstall -Preference $ManagerPreference
 
         $packagesWinget = $packagesSorted[[PackageManagers]::Winget]
         $packagesChoco = $packagesSorted[[PackageManagers]::Choco]
 
+        Write-Host "Winget packages: $($packagesWinget.Count), Choco packages: $($packagesChoco.Count)" -ForegroundColor Cyan
+
         try {
             $sync.ProcessRunning = $true
+            Write-Host "ProcessRunning set to true. Beginning installations..." -ForegroundColor Green
             if($packagesWinget.Count -gt 0 -and $packagesWinget -ne "0") {
                 Show-WPFInstallAppBusy -text "Installing apps..."
                 Install-WinUtilWinget
@@ -17211,8 +17218,24 @@ $sync["Form"].Add_ContentRendered({
                     if (-not $sync.ProcessRunning) {
                         Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
                         Invoke-WPFInstall -PackagesToInstall $packagesToInstall
-                        while ($sync.ProcessRunning) {
+
+                        # Wait for the runspace to start and set ProcessRunning to true
+                        $startWaitCount = 0
+                        while (-not $sync.ProcessRunning -and $startWaitCount -lt 5) {
+                            Write-Host "Waiting for installation to start... ($startWaitCount/5)" -ForegroundColor Yellow
                             Start-Sleep -Seconds 1
+                            $startWaitCount++
+                        }
+
+                        # Now wait for the installation to complete
+                        if ($sync.ProcessRunning) {
+                            Write-Host "Installation started. Waiting for completion..." -ForegroundColor Green
+                            while ($sync.ProcessRunning) {
+                                Start-Sleep -Seconds 2
+                            }
+                            Write-Host "Installation completed." -ForegroundColor Green
+                        } else {
+                            Write-Host "WARNING: Installation did not start. ProcessRunning never became true." -ForegroundColor Yellow
                         }
                     } else {
                         Write-Host "ERROR: ProcessRunning is still true after force reset. Cannot install packages." -ForegroundColor Red

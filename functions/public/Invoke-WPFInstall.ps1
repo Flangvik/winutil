@@ -54,16 +54,23 @@ function Invoke-WPFInstall {
 
     $ManagerPreference = $sync["ManagerPreference"]
 
+    Write-Host "Starting installation runspace..." -ForegroundColor Cyan
+
     Invoke-WPFRunspace -ParameterList @(("PackagesToInstall", $PackagesToInstall),("ManagerPreference", $ManagerPreference)) -DebugPreference $DebugPreference -ScriptBlock {
         param($PackagesToInstall, $ManagerPreference, $DebugPreference)
+
+        Write-Host "Installation runspace started. Processing packages..." -ForegroundColor Green
 
         $packagesSorted = Get-WinUtilSelectedPackages -PackageList $PackagesToInstall -Preference $ManagerPreference
 
         $packagesWinget = $packagesSorted[[PackageManagers]::Winget]
         $packagesChoco = $packagesSorted[[PackageManagers]::Choco]
 
+        Write-Host "Winget packages: $($packagesWinget.Count), Choco packages: $($packagesChoco.Count)" -ForegroundColor Cyan
+
         try {
             $sync.ProcessRunning = $true
+            Write-Host "ProcessRunning set to true. Beginning installations..." -ForegroundColor Green
             if($packagesWinget.Count -gt 0 -and $packagesWinget -ne "0") {
                 Show-WPFInstallAppBusy -text "Installing apps..."
                 Install-WinUtilWinget
