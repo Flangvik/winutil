@@ -61,6 +61,8 @@ public class PowerManagement {
     $WPBT = $sync.MicroWinWPBT.IsChecked
     $unsupported = $sync.MicroWinUnsupported.IsChecked
     $skipFla = $sync.MicroWinNoFLA.IsChecked
+    $nukeDefender = $sync.MicroWinNukeDefender.IsChecked
+    $addActivationShortcut = $sync.MicroWinActivationShortcut.IsChecked
 
     $importVirtIO = $sync.MicrowinCopyVirtIO.IsChecked
 
@@ -296,7 +298,7 @@ public class PowerManagement {
         Write-Host "Done Copy unattend.xml"
 
         Write-Host "Create FirstRun"
-        Microwin-NewFirstRun
+        Microwin-NewFirstRun -AddActivationShortcut $addActivationShortcut
         Write-Host "Done create FirstRun"
         Write-Host "Copy FirstRun.ps1 into the ISO"
         Copy-Item "$env:temp\FirstStartup.ps1" "$($scratchDir)\Windows\FirstStartup.ps1" -force
@@ -331,6 +333,11 @@ public class PowerManagement {
 
         Write-Host "Fix Windows Volume Mixer Issue"
         reg add "HKLM\zNTUSER\Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore" /f
+
+        if ($nukeDefender) {
+            Write-Host "Removing Windows Defender completely..."
+            Microwin-RemoveDefender -ScratchDir $scratchDir
+        }
 
         Write-Host "Bypassing system requirements (system image)"
         reg add "HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache" /v "SV1" /t REG_DWORD /d 0 /f

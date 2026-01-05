@@ -2008,6 +2008,14 @@
         "link": "https://starship.rs/",
         "winget": "starship"
     },
+    "startallback": {
+        "category": "Utilities",
+        "choco": "startallback",
+        "content": "StartAllBack",
+        "description": "StartAllBack restores the classic Start menu and taskbar functionality to Windows 11, providing a familiar and customizable experience.",
+        "link": "https://www.startallback.com/",
+        "winget": "StartIsBack.StartAllBack"
+    },
     "steam": {
         "category": "Games",
         "choco": "steam-client",

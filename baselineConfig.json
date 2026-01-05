@@ -1,0 +1,96 @@
+{
+    "WPFTweaks":  [
+                      "WPFTweaksRestorePoint",
+                      "WPFTweaksRazerBlock",
+                      "WPFTweaksRightClickMenu",
+                      "WPFTweaksActivity",
+                      "WPFTweaksMakeEdgeUninstallable",
+                      "WPFTweaksStorage",
+                      "WPFTweaksHiber",
+                      "WPFTweaksRemoveHome",
+                      "WPFTweaksIPv46",
+                      "WPFTweaksConsumerFeatures",
+                      "WPFTweaksDVR",
+                      "WPFTweaksRemoveGallery",
+                      "WPFTweaksTele",
+                      "WPFTweaksLocation",
+                      "WPFTweaksDisplay",
+                      "WPFTweaksEndTaskOnTaskbar",
+                      "WPFTweaksBlockAdobeNet",
+                      "WPFTweaksEdgeDebloat",
+                      "WPFTweaksRemoveCopilot",
+                      "WPFTweaksDiskCleanup",
+                      "WPFTweaksDisableExplorerAutoDiscovery",
+                      "WPFTweaksBraveDebloat",
+                      "WPFTweaksDisableIPv6",
+                      "WPFTweaksDisableNotifications",
+                      "WPFTweaksTeredo",
+                      "WPFTweaksPowershell7Tele",
+                      "WPFTweaksDeleteTempFiles",
+                      "WPFTweaksDisableBGapps",
+                      "WPFTweaksPowershell7",
+                      "WPFTweaksServices"
+                  ],
+    "Install":  [
+                    {
+                        "winget":  "7zip.7zip",
+                        "choco":  "7zip"
+                    },
+                    {
+                        "winget":  "LibreWolf.LibreWolf",
+                        "choco":  "librewolf"
+                    },
+                    {
+                        "winget":  "Microsoft.VCRedist.2015+.x86",
+                        "choco":  "na"
+                    },
+                    {
+                        "winget":  "Python.Python.3.13",
+                        "choco":  "python"
+                    },
+                    {
+                        "winget":  "Microsoft.SQLServerManagementStudio",
+                        "choco":  "sql-server-management-studio"
+                    },
+                    {
+                        "winget":  "Foxit.FoxitReader",
+                        "choco":  "foxitreader"
+                    },
+                    {
+                        "winget":  "Microsoft.VisualStudio.2022.Community",
+                        "choco":  "visualstudio2022community"
+                    },
+                    {
+                        "winget":  "Microsoft.VCRedist.2015+.x64",
+                        "choco":  "na"
+                    },
+                    {
+                        "winget":  "VideoLAN.VLC",
+                        "choco":  "vlc"
+                    },
+                    {
+                        "winget":  "Microsoft.VisualStudioCode",
+                        "choco":  "vscode"
+                    },
+                    {
+                        "winget":  "Git.Git",
+                        "choco":  "git"
+                    }
+                ],
+    "WPFInstall":  [
+                       "WPFInstall7zip",
+                       "WPFInstalllibrewolf",
+                       "WPFInstallvc2015_32",
+                       "WPFInstallpython3",
+                       "WPFInstallsqlmanagementstudio",
+                       "WPFInstallfoxpdfreader",
+                       "WPFInstallvisualstudio",
+                       "WPFInstallvc2015_64",
+                       "WPFInstallvlc",
+                       "WPFInstallvscode",
+                       "WPFInstallgit"
+                   ],
+    "WPFFeature":  [
+                       "WPFFeaturesdotnet"
+                   ]
+}

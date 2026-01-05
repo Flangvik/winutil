@@ -44,9 +44,24 @@ function Invoke-WPFPresets {
 
     foreach ($CheckBox in $CheckBoxes) {
         $checkboxName = $CheckBox.Key
+        $checkbox = $CheckBox.Value
 
         if (-not $CheckBoxesToCheck) {
             $sync.$checkboxName.IsChecked = $false
+            # If it's a WPFInstall checkbox, also remove from selectedApps
+            if ($checkboxName -like "WPFInstall*") {
+                # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
+                # This matches what's stored in applicationsHashtable
+                $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
+                    $checkbox.Parent.Tag
+                } else {
+                    # Fallback: use checkboxName directly (already has WPFInstall prefix)
+                    $checkboxName
+                }
+                if ($appKey -and $sync.selectedApps -contains $appKey) {
+                    $sync.selectedApps.Remove($appKey)
+                }
+            }
             continue
         }
 
@@ -55,10 +70,56 @@ function Invoke-WPFPresets {
             # If it exists, set IsChecked to true
             $sync.$checkboxName.IsChecked = $true
             Write-Debug "$checkboxName is checked"
+            # If it's a WPFInstall checkbox, also add to selectedApps
+            if ($checkboxName -like "WPFInstall*") {
+                # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
+                # This matches what's stored in applicationsHashtable
+                $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
+                    $checkbox.Parent.Tag
+                } else {
+                    # Fallback: use checkboxName directly (already has WPFInstall prefix)
+                    $checkboxName
+                }
+                if ($appKey -and -not ($sync.selectedApps -contains $appKey)) {
+                    $sync.selectedApps.Add($appKey)
+                    [System.Collections.Generic.List[pscustomobject]]$sync.selectedApps = $sync.selectedApps | Sort-Object
+                }
+            }
         } else {
             # If it doesn't exist, set IsChecked to false
             $sync.$checkboxName.IsChecked = $false
             Write-Debug "$checkboxName is not checked"
+            # If it's a WPFInstall checkbox, also remove from selectedApps
+            if ($checkboxName -like "WPFInstall*") {
+                # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
+                # This matches what's stored in applicationsHashtable
+                $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
+                    $checkbox.Parent.Tag
+                } else {
+                    # Fallback: use checkboxName directly (already has WPFInstall prefix)
+                    $checkboxName
+                }
+                if ($appKey -and $sync.selectedApps -contains $appKey) {
+                    $sync.selectedApps.Remove($appKey)
+                }
+            }
+        }
+    }
+
+    # Update the selected apps button count if any WPFInstall checkboxes were modified
+    if ($CheckBoxes | Where-Object { $_.Key -like "WPFInstall*" }) {
+        $count = $sync.selectedApps.Count
+        if ($sync.WPFselectedAppsButton) {
+            $sync.WPFselectedAppsButton.Content = "Selected Apps: $count"
+        }
+        # Update the selected apps popup menu
+        if ($sync.selectedAppsstackPanel) {
+            $sync.selectedAppsstackPanel.Children.Clear()
+            $sync.selectedApps | Foreach-Object {
+                if ($sync.configs.applicationsHashtable.$_) {
+                    Add-SelectedAppsMenuItem -name $($sync.configs.applicationsHashtable.$_.Content) -key $_
+                }
+            }
         }
     }
 }

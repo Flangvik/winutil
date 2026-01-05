@@ -1,9 +1,47 @@
 function Microwin-NewFirstRun {
+    param(
+        [Parameter(Mandatory=$false)]
+        [bool]$AddActivationShortcut = $false
+    )
 
     # using here string to embed firstrun
     $firstRun = @'
     # Set the global error action preference to continue
     $ErrorActionPreference = "Continue"
+
+    # Backup Defender removal - runs early before Defender can activate
+    try {
+        "Defender removal backup started at $(Get-Date)" | Out-File -FilePath "$env:HOMEDRIVE\windows\LogDefenderRemoval.txt" -Append -NoClobber
+
+        # List of Defender folders to remove
+        $defenderFolders = @(
+            "$env:ProgramData\Microsoft\Windows Defender\Platform",
+            "$env:ProgramFiles\Windows Defender",
+            "$env:ProgramFiles\Windows Defender Advanced Threat Protection",
+            "${env:ProgramFiles(x86)}\Windows Defender"
+        )
+
+        foreach ($folderPath in $defenderFolders) {
+            if (Test-Path -Path $folderPath) {
+                try {
+                    # Take ownership and remove
+                    takeown /f "$folderPath" /r /d Y >$null 2>&1
+                    icacls "$folderPath" /grant administrators:F /t >$null 2>&1
+                    Remove-Item -Path "$folderPath" -Recurse -Force -ErrorAction SilentlyContinue
+                    "Removed folder: $folderPath" | Out-File -FilePath "$env:HOMEDRIVE\windows\LogDefenderRemoval.txt" -Append
+                } catch {
+                    "Could not remove folder $folderPath : $_" | Out-File -FilePath "$env:HOMEDRIVE\windows\LogDefenderRemoval.txt" -Append
+                }
+            } else {
+                "Folder not found at: $folderPath" | Out-File -FilePath "$env:HOMEDRIVE\windows\LogDefenderRemoval.txt" -Append
+            }
+        }
+
+        "Defender removal backup completed at $(Get-Date)" | Out-File -FilePath "$env:HOMEDRIVE\windows\LogDefenderRemoval.txt" -Append
+    } catch {
+        "Error during Defender removal backup: $_" | Out-File -FilePath "$env:HOMEDRIVE\windows\LogDefenderRemoval.txt" -Append
+    }
+
     function Remove-RegistryValue {
         param (
             [Parameter(Mandatory = $true)]
@@ -114,5 +152,45 @@ function Microwin-NewFirstRun {
     }
 
 '@
+
+    # Add activation shortcut code if requested
+    if ($AddActivationShortcut) {
+        $activationShortcutCode = @'
+
+    # Create activation shortcut on default user desktop
+    try {
+        $defaultUserDesktop = "$env:PUBLIC\Desktop"
+        if (-not (Test-Path -Path $defaultUserDesktop)) {
+            $defaultUserDesktop = "$env:SystemDrive\Users\Default\Desktop"
+        }
+
+        if (Test-Path -Path $defaultUserDesktop) {
+            $shortcutPath = Join-Path $defaultUserDesktop "Activate Windows.lnk"
+            $WshShell = New-Object -ComObject WScript.Shell
+            $Shortcut = $WshShell.CreateShortcut($shortcutPath)
+            $Shortcut.TargetPath = "powershell.exe"
+            $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command `\"irm https://get.activated.win | iex`\"' -Verb RunAs`""
+            $Shortcut.Description = "Activate Windows"
+            $Shortcut.WorkingDirectory = "$env:SystemRoot\System32"
+            $Shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,27"
+            $Shortcut.Save()
+
+            # Set the "Run as administrator" flag on the shortcut
+            $bytes = [System.IO.File]::ReadAllBytes($shortcutPath)
+            if ($bytes.Length -gt 0x15) {
+                $bytes[0x15] = $bytes[0x15] -bor 0x20
+                [System.IO.File]::WriteAllBytes($shortcutPath, $bytes)
+            }
+
+            Write-Host "Activation shortcut created on default user desktop"
+        }
+    } catch {
+        Write-Host "Warning: Could not create activation shortcut: $_"
+    }
+
+'@
+        $firstRun += $activationShortcutCode
+    }
+
     $firstRun | Out-File -FilePath "$env:temp\FirstStartup.ps1" -Force
 }
