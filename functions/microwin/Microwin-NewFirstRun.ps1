@@ -148,7 +148,7 @@ function Microwin-NewFirstRun {
     if (Test-Path -Path "$env:HOMEDRIVE\winutil-config.json")
     {
         Write-Host "Configuration file detected. Applying..."
-        iex "& { $(irm christitus.com/win) } -Config `"$env:HOMEDRIVE\winutil-config.json`" -Run"
+        iex "& { $(irm https://raw.githubusercontent.com/Flangvik/winutil/refs/heads/main/winutil.ps1) } -Config `"$env:HOMEDRIVE\winutil-config.json`" -Run"
     }
 
 '@
@@ -157,19 +157,27 @@ function Microwin-NewFirstRun {
     if ($AddActivationShortcut) {
         $activationShortcutCode = @'
 
-    # Create activation shortcut on default user desktop
+    # Create activation shortcut on the local user's desktop (the user created by MicroWin)
     try {
-        $defaultUserDesktop = "$env:PUBLIC\Desktop"
-        if (-not (Test-Path -Path $defaultUserDesktop)) {
-            $defaultUserDesktop = "$env:SystemDrive\Users\Default\Desktop"
+        # Use the current logged-in user's desktop (MicroWin creates the user and auto-logs them in)
+        $userDesktop = [Environment]::GetFolderPath('Desktop')
+        if (-not (Test-Path -Path $userDesktop)) {
+            # Fallback to USERPROFILE\Desktop if GetFolderPath doesn't work
+            $userDesktop = Join-Path $env:USERPROFILE "Desktop"
         }
 
-        if (Test-Path -Path $defaultUserDesktop) {
-            $shortcutPath = Join-Path $defaultUserDesktop "Activate Windows.lnk"
+        if (Test-Path -Path $userDesktop) {
+            $shortcutPath = Join-Path $userDesktop "Activate Windows.lnk"
             $WshShell = New-Object -ComObject WScript.Shell
             $Shortcut = $WshShell.CreateShortcut($shortcutPath)
             $Shortcut.TargetPath = "powershell.exe"
-            $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command `\"irm https://get.activated.win | iex`\"' -Verb RunAs`""
+            # Encode the activation command to avoid quote escaping issues
+            $activationCmd = "irm https://get.activated.win | iex"
+            $encodedCmd = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($activationCmd))
+            # Use encoded command in Start-Process to avoid nested quote issues
+            $elevationCmd = "Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '$encodedCmd') -Verb RunAs"
+            $elevationEncoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($elevationCmd))
+            $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $elevationEncoded"
             $Shortcut.Description = "Activate Windows"
             $Shortcut.WorkingDirectory = "$env:SystemRoot\System32"
             $Shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,27"
@@ -182,7 +190,7 @@ function Microwin-NewFirstRun {
                 [System.IO.File]::WriteAllBytes($shortcutPath, $bytes)
             }
 
-            Write-Host "Activation shortcut created on default user desktop"
+            Write-Host "Activation shortcut created on user desktop"
         }
     } catch {
         Write-Host "Warning: Could not create activation shortcut: $_"
