@@ -129,6 +129,8 @@ function Invoke-WPFImpex {
                     $flattenedJson = $jsonFile.PSObject.Properties.Where({ $_.Name -ne "Install" -and $_.Name -ne "ManagerPreference" -and $_.Name -ne "WPFInstall" }).ForEach({ $_.Value })
                     # Skip WPFInstall processing since we already populated selectedApps from config
                     $skipWPFInstall = $jsonFile.PSObject.Properties.Name -contains "WPFInstall" -and $jsonFile.WPFInstall
+                    Write-Host "skipWPFInstall flag: $skipWPFInstall" -ForegroundColor Cyan
+                    Write-Host "flattenedJson count: $($flattenedJson.Count)" -ForegroundColor Cyan
                     Invoke-WPFPresets -preset $flattenedJson -imported $true -skipWPFInstall $skipWPFInstall
                     Write-Host "After Invoke-WPFPresets - selectedApps count: $($sync.selectedApps.Count)" -ForegroundColor Cyan
                 }

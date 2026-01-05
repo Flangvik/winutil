@@ -29,6 +29,8 @@ function Invoke-WPFPresets {
         [bool]$skipWPFInstall = $false
     )
 
+    Write-Debug "Invoke-WPFPresets called with skipWPFInstall=$skipWPFInstall"
+
     if ($imported -eq $true) {
         $CheckBoxesToCheck = $preset
     } else {
@@ -52,17 +54,22 @@ function Invoke-WPFPresets {
         if (-not $CheckBoxesToCheck) {
             $sync.$checkboxName.IsChecked = $false
             # If it's a WPFInstall checkbox, also remove from selectedApps (unless skipWPFInstall is true)
-            if ($checkboxName -like "WPFInstall*" -and -not $skipWPFInstall) {
-                # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
-                # This matches what's stored in applicationsHashtable
-                $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
-                    $checkbox.Parent.Tag
+            if ($checkboxName -like "WPFInstall*") {
+                if ($skipWPFInstall) {
+                    Write-Debug "Skipping removal of WPFInstall checkbox $checkboxName (skipWPFInstall=true)"
                 } else {
-                    # Fallback: use checkboxName directly (already has WPFInstall prefix)
-                    $checkboxName
-                }
-                if ($appKey -and $sync.selectedApps -contains $appKey) {
-                    $sync.selectedApps.Remove($appKey)
+                    # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
+                    # This matches what's stored in applicationsHashtable
+                    $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
+                        $checkbox.Parent.Tag
+                    } else {
+                        # Fallback: use checkboxName directly (already has WPFInstall prefix)
+                        $checkboxName
+                    }
+                    if ($appKey -and $sync.selectedApps -contains $appKey) {
+                        Write-Debug "Removing WPFInstall app $appKey from selectedApps (no CheckBoxesToCheck)"
+                        $sync.selectedApps.Remove($appKey)
+                    }
                 }
             }
             continue
@@ -111,17 +118,22 @@ function Invoke-WPFPresets {
             $sync.$checkboxName.IsChecked = $false
             Write-Debug "$checkboxName is not checked"
             # If it's a WPFInstall checkbox, also remove from selectedApps (unless skipWPFInstall is true)
-            if ($checkboxName -like "WPFInstall*" -and -not $skipWPFInstall) {
-                # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
-                # This matches what's stored in applicationsHashtable
-                $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
-                    $checkbox.Parent.Tag
+            if ($checkboxName -like "WPFInstall*") {
+                if ($skipWPFInstall) {
+                    Write-Debug "Skipping removal of WPFInstall checkbox $checkboxName (skipWPFInstall=true)"
                 } else {
-                    # Fallback: use checkboxName directly (already has WPFInstall prefix)
-                    $checkboxName
-                }
-                if ($appKey -and $sync.selectedApps -contains $appKey) {
-                    $sync.selectedApps.Remove($appKey)
+                    # Use checkbox.Parent.Tag which contains the full app key (e.g., "WPFInstallchrome")
+                    # This matches what's stored in applicationsHashtable
+                    $appKey = if ($checkbox.Parent -and $checkbox.Parent.Tag) {
+                        $checkbox.Parent.Tag
+                    } else {
+                        # Fallback: use checkboxName directly (already has WPFInstall prefix)
+                        $checkboxName
+                    }
+                    if ($appKey -and $sync.selectedApps -contains $appKey) {
+                        Write-Debug "Removing WPFInstall app $appKey from selectedApps (not in CheckBoxesToCheck)"
+                        $sync.selectedApps.Remove($appKey)
+                    }
                 }
             }
         }
@@ -130,13 +142,16 @@ function Invoke-WPFPresets {
     # Update the selected apps button count if any WPFInstall checkboxes were modified
     if ($CheckBoxes | Where-Object { $_.Key -like "WPFInstall*" }) {
         # Final deduplication and sorting of selectedApps
-        if ($sync.selectedApps -and $sync.selectedApps.Count -gt 0) {
+        # Only process if skipWPFInstall is false, otherwise preserve existing selectedApps
+        if (-not $skipWPFInstall -and $sync.selectedApps -and $sync.selectedApps.Count -gt 0) {
             $uniqueApps = $sync.selectedApps | Select-Object -Unique | Sort-Object
             $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
             foreach ($app in $uniqueApps) {
                 $sync.selectedApps.Add([string]$app)
             }
             Write-Debug "Invoke-WPFPresets: Final selectedApps count after deduplication: $($sync.selectedApps.Count)"
+        } elseif ($skipWPFInstall) {
+            Write-Debug "Invoke-WPFPresets: Skipping final deduplication (skipWPFInstall=true), preserving selectedApps count: $($sync.selectedApps.Count)"
         }
 
         $count = $sync.selectedApps.Count
