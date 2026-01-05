@@ -93,18 +93,36 @@ function Invoke-WPFImpex {
                     # Directly populate selectedApps from WPFInstall array in config
                     # This ensures apps are available for installation even if checkboxes aren't found yet
                     if ($jsonFile.PSObject.Properties.Name -contains "WPFInstall" -and $jsonFile.WPFInstall) {
+                        Write-Host "Found WPFInstall in config with $($jsonFile.WPFInstall.Count) items" -ForegroundColor Cyan
                         if (-not $sync.selectedApps) {
-                            $sync.selectedApps = [System.Collections.Generic.List[pscustomobject]]::new()
+                            $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
                         }
                         # Clear existing selections and add from config
                         $sync.selectedApps.Clear()
                         foreach ($appKey in $jsonFile.WPFInstall) {
-                            if ($appKey -and -not ($sync.selectedApps -contains $appKey)) {
-                                $sync.selectedApps.Add($appKey)
+                            if ($appKey) {
+                                # Ensure app key has WPFInstall prefix if it doesn't already
+                                $normalizedKey = if ($appKey -notlike "WPFInstall*") {
+                                    "WPFInstall$appKey"
+                                } else {
+                                    $appKey
+                                }
+                                if (-not ($sync.selectedApps -contains $normalizedKey)) {
+                                    $sync.selectedApps.Add($normalizedKey)
+                                    Write-Host "  Added app key to selectedApps: $normalizedKey" -ForegroundColor Green
+                                }
                             }
                         }
-                        [System.Collections.Generic.List[pscustomobject]]$sync.selectedApps = $sync.selectedApps | Sort-Object
-                        Write-Debug "Populated selectedApps from config: $($sync.selectedApps.Count) apps"
+                        # Sort but keep as List[string]
+                        $sortedApps = $sync.selectedApps | Sort-Object
+                        $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+                        foreach ($app in $sortedApps) {
+                            $sync.selectedApps.Add($app)
+                        }
+                        Write-Host "Populated selectedApps from config: $($sync.selectedApps.Count) apps total" -ForegroundColor Green
+                        Write-Host "Selected apps: $($sync.selectedApps -join ', ')" -ForegroundColor Cyan
+                    } else {
+                        Write-Host "WARNING: No WPFInstall property found in config file or it's empty" -ForegroundColor Yellow
                     }
 
                     $flattenedJson = $jsonFile.PSObject.Properties.Where({ $_.Name -ne "Install" -and $_.Name -ne "ManagerPreference" }).ForEach({ $_.Value })

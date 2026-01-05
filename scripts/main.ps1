@@ -345,7 +345,12 @@ $sync["Form"].Add_ContentRendered({
     # maybe this is not the best place to load and execute config file?
     # maybe community can help?
     if ($PARAM_CONFIG -and -not [string]::IsNullOrWhiteSpace($PARAM_CONFIG)) {
+        Write-Host "Importing config file: $PARAM_CONFIG" -ForegroundColor Cyan
         Invoke-WPFImpex -type "import" -Config $PARAM_CONFIG
+        Write-Host "After import - selectedApps count: $($sync.selectedApps.Count)" -ForegroundColor Cyan
+        if ($sync.selectedApps.Count -gt 0) {
+            Write-Host "Selected apps after import: $($sync.selectedApps -join ', ')" -ForegroundColor Cyan
+        }
         if ($PARAM_RUN) {
             # Wait for any existing process to complete before starting
             while ($sync.ProcessRunning) {
@@ -372,11 +377,31 @@ $sync["Form"].Add_ContentRendered({
             Start-Sleep -Seconds 5
 
             Write-Host "Installing applications..."
-            if (-not $sync.ProcessRunning) {
-                Invoke-WPFInstall
-                while ($sync.ProcessRunning) {
-                    Start-Sleep -Seconds 1
+            Write-Host "Selected apps count: $($sync.selectedApps.Count)"
+            if ($sync.selectedApps.Count -gt 0) {
+                Write-Host "Selected apps: $($sync.selectedApps -join ', ')"
+                # Build packages list directly from selectedApps and applicationsHashtable
+                $packagesToInstall = @()
+                foreach ($appKey in $sync.selectedApps) {
+                    if ($sync.configs.applicationsHashtable.$appKey) {
+                        $packagesToInstall += $sync.configs.applicationsHashtable.$appKey
+                        Write-Host "Added package: $($sync.configs.applicationsHashtable.$appKey.Content)"
+                    } else {
+                        Write-Host "WARNING: App key '$appKey' not found in applicationsHashtable"
+                    }
                 }
+                Write-Host "Packages to install count: $($packagesToInstall.Count)"
+                
+                if ($packagesToInstall.Count -gt 0 -and -not $sync.ProcessRunning) {
+                    Invoke-WPFInstall -PackagesToInstall $packagesToInstall
+                    while ($sync.ProcessRunning) {
+                        Start-Sleep -Seconds 1
+                    }
+                } else {
+                    Write-Host "WARNING: No packages to install or process already running"
+                }
+            } else {
+                Write-Host "WARNING: No applications selected in config file"
             }
             Start-Sleep -Seconds 5
 

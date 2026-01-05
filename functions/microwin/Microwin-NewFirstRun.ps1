@@ -18,7 +18,17 @@ function Microwin-NewFirstRun {
         Write-Host "$timestamp - $Message"
     }
 
+    # Check if script is being run manually (not via FirstLogonCommands)
+    $isManualRun = $false
+    if ($MyInvocation.Line -or $PSCommandPath) {
+        $isManualRun = $true
+        Write-Log "=== Script executed manually (not via FirstLogonCommands) ==="
+    }
+
     Write-Log "=== FirstRun Script Started ==="
+    Write-Log "Script path: $($MyInvocation.PSCommandPath)"
+    Write-Log "Command line: $($MyInvocation.Line)"
+    Write-Log "Manual execution: $isManualRun"
     Write-Log "USERPROFILE: $env:USERPROFILE"
     Write-Log "HOMEDRIVE: $env:HOMEDRIVE"
     Write-Log "USERNAME: $env:USERNAME"
@@ -30,12 +40,12 @@ function Microwin-NewFirstRun {
         Write-Log "Setting execution policy to RemoteSigned for LocalMachine scope..."
         Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine -Force -ErrorAction Stop
         Write-Log "SUCCESS: Execution policy set to RemoteSigned for LocalMachine"
-        
+
         # Also set for CurrentUser as a fallback
         Write-Log "Setting execution policy to RemoteSigned for CurrentUser scope..."
         Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
         Write-Log "Execution policy set for CurrentUser scope"
-        
+
         # Verify the setting
         $localMachinePolicy = Get-ExecutionPolicy -Scope LocalMachine
         Write-Log "Verified LocalMachine execution policy: $localMachinePolicy"
@@ -58,6 +68,155 @@ function Microwin-NewFirstRun {
         }
     }
     Write-Log "=== PowerShell Execution Policy Configuration Completed ==="
+
+'@
+
+    # Add activation shortcut code early if requested (before desktop cleanup)
+    if ($AddActivationShortcut) {
+        $activationShortcutCode = @'
+
+    # Create activation shortcut on the local user's desktop (the user created by MicroWin)
+    # This is done early to ensure it's created before any desktop cleanup operations
+    Write-Log "=== Starting Activation Shortcut Creation ==="
+    try {
+        # Find the actual user folder by scanning C:\Users and excluding system folders
+        Write-Log "Finding actual user folder..."
+        $usersPath = "$env:HOMEDRIVE\Users"
+        Write-Log "Scanning Users directory: $usersPath"
+
+        # System folders to exclude
+        $excludedFolders = @("Default", "Public", "All Users", "Default User")
+
+        # Get all folders in Users directory
+        $userFolders = Get-ChildItem -Path $usersPath -Directory -ErrorAction SilentlyContinue
+        Write-Log "Found $($userFolders.Count) folders in Users directory"
+        Write-Log "Folders found: $($userFolders.Name -join ', ')"
+
+        # Find the first folder that's not in the excluded list
+        $actualUserFolder = $null
+        foreach ($folder in $userFolders) {
+            if ($folder.Name -notin $excludedFolders) {
+                $actualUserFolder = $folder.FullName
+                Write-Log "Found user folder: $actualUserFolder"
+                break
+            }
+        }
+
+        if ($null -eq $actualUserFolder) {
+            Write-Log "ERROR: Could not find actual user folder in $usersPath"
+            Write-Log "Available folders: $($userFolders.Name -join ', ')"
+            Write-Log "Excluded folders: $($excludedFolders -join ', ')"
+            Write-Log "Cannot create activation shortcut - no user folder found"
+            throw "No user folder found in Users directory"
+        }
+
+        # Use the found user folder - construct desktop path directly
+        $userDesktop = Join-Path $actualUserFolder "Desktop"
+        Write-Log "Using user folder desktop path: $userDesktop"
+
+        Write-Log "Final desktop path: $userDesktop"
+        Write-Log "Desktop path exists: $(Test-Path -Path $userDesktop)"
+
+        if (Test-Path -Path $userDesktop) {
+            $shortcutPath = Join-Path $userDesktop "Activate Windows.lnk"
+            Write-Log "Target shortcut path: $shortcutPath"
+            Write-Log "Shortcut already exists: $(Test-Path -Path $shortcutPath)"
+
+            # Check what's currently on the desktop
+            $desktopContents = Get-ChildItem -Path $userDesktop -ErrorAction SilentlyContinue
+            Write-Log "Current desktop contents count: $($desktopContents.Count)"
+            if ($desktopContents.Count -gt 0) {
+                Write-Log "Desktop contents: $($desktopContents.Name -join ', ')"
+            }
+
+            Write-Log "Creating WScript.Shell COM object"
+            $WshShell = New-Object -ComObject WScript.Shell
+            Write-Log "Creating shortcut object"
+            $Shortcut = $WshShell.CreateShortcut($shortcutPath)
+            Write-Log "Setting shortcut properties"
+            $Shortcut.TargetPath = "powershell.exe"
+            Write-Log "TargetPath set to: $($Shortcut.TargetPath)"
+
+            # Encode the activation command to avoid quote escaping issues
+            $activationCmd = "irm https://get.activated.win | iex"
+            Write-Log "Activation command: $activationCmd"
+            Write-Log "Encoding activation command"
+            $encodedCmd = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($activationCmd))
+            Write-Log "Activation command encoded (length: $($encodedCmd.Length))"
+            Write-Log "Encoded command: $encodedCmd"
+
+            # Build elevation command with proper variable expansion
+            # Use double quotes for the encoded command part so $encodedCmd expands at runtime
+            $elevationCmd = 'Start-Process powershell.exe -ArgumentList @(''-NoProfile'', ''-ExecutionPolicy'', ''Bypass'', ''-EncodedCommand'', "' + $encodedCmd + '") -Verb RunAs'
+            Write-Log "Elevation command: $elevationCmd"
+            Write-Log "Encoding elevation command"
+            $elevationEncoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($elevationCmd))
+            Write-Log "Elevation command encoded (length: $($elevationEncoded.Length))"
+            Write-Log "Final encoded command: $elevationEncoded"
+
+            $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $elevationEncoded"
+            Write-Log "Shortcut arguments: $($Shortcut.Arguments)"
+            Write-Log "Arguments set (length: $($Shortcut.Arguments.Length))"
+            $Shortcut.Description = "Activate Windows"
+            $Shortcut.WorkingDirectory = "$env:SystemRoot\System32"
+            $Shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,27"
+
+            Write-Log "Saving shortcut to: $shortcutPath"
+            $Shortcut.Save()
+            Write-Log "Shortcut saved successfully"
+
+            # Verify shortcut was created
+            if (Test-Path -Path $shortcutPath) {
+                $shortcutInfo = Get-Item -Path $shortcutPath
+                Write-Log "Shortcut file verified - Size: $($shortcutInfo.Length) bytes, Created: $($shortcutInfo.CreationTime)"
+            } else {
+                Write-Log "ERROR: Shortcut file was not created at: $shortcutPath"
+            }
+
+            # Set the "Run as administrator" flag on the shortcut
+            Write-Log "Setting 'Run as administrator' flag on shortcut"
+            $bytes = [System.IO.File]::ReadAllBytes($shortcutPath)
+            Write-Log "Read shortcut file bytes (length: $($bytes.Length))"
+            if ($bytes.Length -gt 0x15) {
+                $bytes[0x15] = $bytes[0x15] -bor 0x20
+                [System.IO.File]::WriteAllBytes($shortcutPath, $bytes)
+                Write-Log "Administrator flag set successfully"
+            } else {
+                Write-Log "WARNING: Shortcut file too small to set administrator flag (length: $($bytes.Length))"
+            }
+
+            # Final verification
+            $finalCheck = Get-ChildItem -Path $userDesktop -Filter "*.lnk" -ErrorAction SilentlyContinue
+            Write-Log "Final desktop .lnk files count: $($finalCheck.Count)"
+            if ($finalCheck.Count -gt 0) {
+                Write-Log "Final desktop .lnk files: $($finalCheck.Name -join ', ')"
+            }
+
+            if (Test-Path -Path $shortcutPath) {
+                Write-Log "SUCCESS: Activation shortcut created successfully at: $shortcutPath"
+                Write-Host "Activation shortcut created on user desktop"
+            } else {
+                Write-Log "ERROR: Activation shortcut was not found after creation attempt"
+            }
+        } else {
+            Write-Log "ERROR: Desktop path does not exist: $userDesktop"
+            Write-Log "Cannot create activation shortcut - desktop path unavailable"
+        }
+    } catch {
+        Write-Log "ERROR: Exception occurred while creating activation shortcut: $_"
+        Write-Log "ERROR: Exception type: $($_.Exception.GetType().FullName)"
+        Write-Log "ERROR: Exception message: $($_.Exception.Message)"
+        Write-Log "ERROR: Stack trace: $($_.ScriptStackTrace)"
+        Write-Host "Warning: Could not create activation shortcut: $_"
+    }
+    Write-Log "=== Activation Shortcut Creation Completed ==="
+
+'@
+        $firstRun += $activationShortcutCode
+    }
+
+    # Continue with the rest of the script
+    $firstRun += @'
 
     # Backup Defender removal - runs early before Defender can activate
     try {
@@ -136,17 +295,16 @@ function Microwin-NewFirstRun {
     Remove-RegistryValue -RegistryPath "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband" -ValueName "Favorites"
     Write-Log "Taskbar registry cleanup completed"
 
-    # Delete Edge Icon from the desktop and clean up desktop shortcuts
-    # Note: This happens before activation shortcut creation, so the activation shortcut will not be deleted
-    Write-Log "=== Starting Desktop Cleanup ==="
-    
+    # Log desktop contents (no cleanup - preserving all shortcuts)
+    Write-Log "=== Desktop Contents Check ==="
+
     # Find the actual user folder by scanning C:\Users and excluding system folders
     Write-Log "Finding actual user folder for desktop cleanup..."
     $usersPath = "$env:HOMEDRIVE\Users"
     $excludedFolders = @("Default", "Public", "All Users", "Default User")
     $userFolders = Get-ChildItem -Path $usersPath -Directory -ErrorAction SilentlyContinue
     Write-Log "Found $($userFolders.Count) folders in Users directory: $($userFolders.Name -join ', ')"
-    
+
     # Find the first folder that's not in the excluded list
     $actualUserFolder = $null
     foreach ($folder in $userFolders) {
@@ -156,50 +314,69 @@ function Microwin-NewFirstRun {
             break
         }
     }
-    
+
     if ($null -eq $actualUserFolder) {
-        Write-Log "WARNING: Could not find actual user folder, using environment variable fallback"
-        $desktopPath = "$env:USERPROFILE\Desktop"
+        Write-Log "ERROR: Could not find actual user folder in $usersPath"
+        Write-Log "Available folders: $($userFolders.Name -join ', ')"
+        Write-Log "Excluded folders: $($excludedFolders -join ', ')"
+        Write-Log "Cannot proceed with desktop cleanup - no user folder found"
+        $desktopPath = $null
     } else {
         $desktopPath = Join-Path $actualUserFolder "Desktop"
     }
+
+    if ($null -eq $desktopPath) {
+        Write-Log "ERROR: Desktop cleanup skipped - no valid user folder found"
+    } else {
+        Write-Log "Desktop path for cleanup: $desktopPath"
+        Write-Log "Desktop path exists: $(Test-Path -Path $desktopPath)"
+        
+        if (Test-Path -Path $desktopPath) {
+            $allDesktopFiles = Get-ChildItem -Path $desktopPath -ErrorAction SilentlyContinue
+            Write-Log "Total files/folders on desktop before cleanup: $($allDesktopFiles.Count)"
+            $desktopLnkFiles = Get-ChildItem -Path $desktopPath -Filter "*.lnk" -ErrorAction SilentlyContinue
+            Write-Log "Total .lnk files on desktop before cleanup: $($desktopLnkFiles.Count)"
+            if ($desktopLnkFiles.Count -gt 0) {
+                Write-Log "Desktop .lnk files found: $($desktopLnkFiles.Name -join ', ')"
+            }
+        } else {
+            Write-Log "WARNING: Desktop path does not exist: $desktopPath"
+        }
+
+        # Log desktop contents but do not remove any .lnk files
+        $edgeShortcutFiles = Get-ChildItem -Path $desktopPath -Filter "*Edge*.lnk" -ErrorAction SilentlyContinue
+        Write-Log "Edge shortcut files found: $($edgeShortcutFiles.Count) (not removing)"
+        
+        $allLnkFiles = Get-ChildItem -Path "$desktopPath\*.lnk" -ErrorAction SilentlyContinue
+        Write-Log "Total .lnk files on desktop: $($allLnkFiles.Count) (preserving all shortcuts)"
+        if ($allLnkFiles.Count -gt 0) {
+            Write-Log "Desktop .lnk files: $($allLnkFiles.Name -join ', ')"
+        }
+    }
+
+    # Log default user desktop but do not remove any .lnk files
+    # Find Default user folder dynamically by traversing Users directory
+    Write-Log "Finding Default user folder..."
+    $defaultUserFolder = $null
+    foreach ($folder in $userFolders) {
+        if ($folder.Name -eq "Default") {
+            $defaultUserFolder = $folder.FullName
+            Write-Log "Found Default user folder: $defaultUserFolder"
+            break
+        }
+    }
     
-    Write-Log "Desktop path for cleanup: $desktopPath"
-    Write-Log "Desktop path exists: $(Test-Path -Path $desktopPath)"
-    
-    if (Test-Path -Path $desktopPath) {
-        $allDesktopFiles = Get-ChildItem -Path $desktopPath -ErrorAction SilentlyContinue
-        Write-Log "Total files/folders on desktop before cleanup: $($allDesktopFiles.Count)"
-        $desktopLnkFiles = Get-ChildItem -Path $desktopPath -Filter "*.lnk" -ErrorAction SilentlyContinue
-        Write-Log "Total .lnk files on desktop before cleanup: $($desktopLnkFiles.Count)"
-        if ($desktopLnkFiles.Count -gt 0) {
-            Write-Log "Desktop .lnk files found: $($desktopLnkFiles.Name -join ', ')"
+    if ($null -ne $defaultUserFolder) {
+        $defaultDesktopPath = Join-Path $defaultUserFolder "Desktop"
+        if (Test-Path -Path $defaultDesktopPath) {
+            $defaultLnkFiles = Get-ChildItem -Path "$defaultDesktopPath\*.lnk" -ErrorAction SilentlyContinue
+            Write-Log "Default user desktop .lnk files: $($defaultLnkFiles.Count) (preserving all shortcuts)"
+        } else {
+            Write-Log "Default user desktop path does not exist: $defaultDesktopPath"
         }
     } else {
-        Write-Log "WARNING: Desktop path does not exist: $desktopPath"
+        Write-Log "Default user folder not found in Users directory"
     }
-
-    $edgeShortcutFiles = Get-ChildItem -Path $desktopPath -Filter "*Edge*.lnk" -ErrorAction SilentlyContinue
-    Write-Log "Edge shortcut files found: $($edgeShortcutFiles.Count)"
-    # Check if Edge shortcuts exist on the desktop
-    if ($edgeShortcutFiles) {
-        foreach ($shortcutFile in $edgeShortcutFiles) {
-            # Remove each Edge shortcut
-            Write-Log "Removing Edge shortcut: $($shortcutFile.FullName)"
-            Remove-Item -Path $shortcutFile.FullName -Force -ErrorAction SilentlyContinue
-            Write-Log "Edge shortcut '$($shortcutFile.Name)' removed from the desktop."
-        }
-    }
-
-    Write-Log "Removing all .lnk files from $desktopPath"
-    $removedCount = (Get-ChildItem -Path "$desktopPath\*.lnk" -ErrorAction SilentlyContinue).Count
-    Remove-Item -Path "$desktopPath\*.lnk" -ErrorAction SilentlyContinue
-    Write-Log "Removed $removedCount .lnk files from user desktop"
-
-    Write-Log "Removing all .lnk files from $env:HOMEDRIVE\Users\Default\Desktop"
-    $defaultRemovedCount = (Get-ChildItem -Path "$env:HOMEDRIVE\Users\Default\Desktop\*.lnk" -ErrorAction SilentlyContinue).Count
-    Remove-Item -Path "$env:HOMEDRIVE\Users\Default\Desktop\*.lnk" -ErrorAction SilentlyContinue
-    Write-Log "Removed $defaultRemovedCount .lnk files from default user desktop"
     
     Write-Log "=== Desktop Cleanup Completed ==="
 
@@ -271,7 +448,7 @@ function Microwin-NewFirstRun {
     Write-Log "Taskbar alignment set to left"
 
     Write-Log "=== FirstRun Script Main Section Completed ==="
-    
+
     # Install VMware Tools via Chocolatey
     Write-Log "=== Starting VMware Tools Installation ==="
     try {
@@ -289,7 +466,7 @@ function Microwin-NewFirstRun {
         } else {
             Write-Log "Chocolatey is not installed, attempting to install..."
         }
-        
+
         # Install Chocolatey if not installed
         if (-not $chocoInstalled) {
             try {
@@ -299,11 +476,11 @@ function Microwin-NewFirstRun {
                 $chocoInstallScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
                 Invoke-Expression $chocoInstallScript
                 Write-Log "Chocolatey installation script executed"
-                
+
                 # Refresh environment variables after installation
                 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
                 Start-Sleep -Seconds 2
-                
+
                 # Verify installation
                 if (Get-Command -Name choco -ErrorAction SilentlyContinue) {
                     Write-Log "Chocolatey installed successfully"
@@ -317,13 +494,13 @@ function Microwin-NewFirstRun {
                 Write-Log "ERROR: Exception message: $($_.Exception.Message)"
             }
         }
-        
+
         # Install VMware Tools if Chocolatey is available
         if ($chocoInstalled) {
             try {
                 Write-Log "Installing VMware Tools via Chocolatey..."
                 Write-Log "Running command: choco install vmware-tools -y"
-                
+
                 # Use Start-Process to capture output and handle errors gracefully
                 $processInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $processInfo.FileName = "choco"
@@ -332,16 +509,16 @@ function Microwin-NewFirstRun {
                 $processInfo.RedirectStandardOutput = $true
                 $processInfo.RedirectStandardError = $true
                 $processInfo.CreateNoWindow = $true
-                
+
                 $process = New-Object System.Diagnostics.Process
                 $process.StartInfo = $processInfo
                 $process.Start() | Out-Null
-                
+
                 $output = $process.StandardOutput.ReadToEnd()
                 $errorOutput = $process.StandardError.ReadToEnd()
                 $process.WaitForExit()
                 $exitCode = $process.ExitCode
-                
+
                 Write-Log "Chocolatey command exit code: $exitCode"
                 if ($output) {
                     Write-Log "Chocolatey output: $output"
@@ -349,7 +526,7 @@ function Microwin-NewFirstRun {
                 if ($errorOutput) {
                     Write-Log "Chocolatey error output: $errorOutput"
                 }
-                
+
                 if ($exitCode -eq 0) {
                     Write-Log "SUCCESS: VMware Tools installed successfully"
                 } else {
@@ -370,7 +547,7 @@ function Microwin-NewFirstRun {
         Write-Log "ERROR: Exception message: $($_.Exception.Message)"
     }
     Write-Log "=== VMware Tools Installation Completed ==="
-    
+
     Clear-Host
     Write-Host "The taskbar will take around a minute to show up, but you can start using your computer now. Try pressing the Windows key to open the Start menu, or Windows + E to launch File Explorer."
     Write-Log "Waiting 10 seconds before checking for config file"
@@ -386,152 +563,10 @@ function Microwin-NewFirstRun {
     } else {
         Write-Log "No configuration file found at: $env:HOMEDRIVE\winutil-config.json"
     }
-    
+
     Write-Log "=== FirstRun Script Execution Completed ==="
 
 '@
-
-    # Add activation shortcut code if requested
-    if ($AddActivationShortcut) {
-        $activationShortcutCode = @'
-
-    # Create activation shortcut on the local user's desktop (the user created by MicroWin)
-    Write-Log "=== Starting Activation Shortcut Creation ==="
-    try {
-        # Find the actual user folder by scanning C:\Users and excluding system folders
-        Write-Log "Finding actual user folder..."
-        $usersPath = "$env:HOMEDRIVE\Users"
-        Write-Log "Scanning Users directory: $usersPath"
-        
-        # System folders to exclude
-        $excludedFolders = @("Default", "Public", "All Users", "Default User")
-        
-        # Get all folders in Users directory
-        $userFolders = Get-ChildItem -Path $usersPath -Directory -ErrorAction SilentlyContinue
-        Write-Log "Found $($userFolders.Count) folders in Users directory"
-        Write-Log "Folders found: $($userFolders.Name -join ', ')"
-        
-        # Find the first folder that's not in the excluded list
-        $actualUserFolder = $null
-        foreach ($folder in $userFolders) {
-            if ($folder.Name -notin $excludedFolders) {
-                $actualUserFolder = $folder.FullName
-                Write-Log "Found user folder: $actualUserFolder"
-                break
-            }
-        }
-        
-        if ($null -eq $actualUserFolder) {
-            Write-Log "WARNING: Could not find actual user folder, trying environment variables"
-            # Fallback to environment variables
-            Write-Log "Attempting to get desktop path using [Environment]::GetFolderPath('Desktop')"
-            $userDesktop = [Environment]::GetFolderPath('Desktop')
-            Write-Log "Desktop path from GetFolderPath: $userDesktop"
-            
-            if (-not (Test-Path -Path $userDesktop)) {
-                Write-Log "Desktop path from GetFolderPath does not exist, using fallback: $env:USERPROFILE\Desktop"
-                $userDesktop = Join-Path $env:USERPROFILE "Desktop"
-            }
-        } else {
-            # Use the found user folder
-            $userDesktop = Join-Path $actualUserFolder "Desktop"
-            Write-Log "Using user folder desktop path: $userDesktop"
-        }
-
-        Write-Log "Final desktop path: $userDesktop"
-        Write-Log "Desktop path exists: $(Test-Path -Path $userDesktop)"
-
-        if (Test-Path -Path $userDesktop) {
-            $shortcutPath = Join-Path $userDesktop "Activate Windows.lnk"
-            Write-Log "Target shortcut path: $shortcutPath"
-            Write-Log "Shortcut already exists: $(Test-Path -Path $shortcutPath)"
-            
-            # Check what's currently on the desktop
-            $desktopContents = Get-ChildItem -Path $userDesktop -ErrorAction SilentlyContinue
-            Write-Log "Current desktop contents count: $($desktopContents.Count)"
-            if ($desktopContents.Count -gt 0) {
-                Write-Log "Desktop contents: $($desktopContents.Name -join ', ')"
-            }
-
-            Write-Log "Creating WScript.Shell COM object"
-            $WshShell = New-Object -ComObject WScript.Shell
-            Write-Log "Creating shortcut object"
-            $Shortcut = $WshShell.CreateShortcut($shortcutPath)
-            Write-Log "Setting shortcut properties"
-            $Shortcut.TargetPath = "powershell.exe"
-            Write-Log "TargetPath set to: $($Shortcut.TargetPath)"
-            
-            # Encode the activation command to avoid quote escaping issues
-            $activationCmd = "irm https://get.activated.win | iex"
-            Write-Log "Encoding activation command"
-            $encodedCmd = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($activationCmd))
-            Write-Log "Activation command encoded (length: $($encodedCmd.Length))"
-            
-            # Use encoded command in Start-Process to avoid nested quote issues
-            $elevationCmd = "Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '$encodedCmd') -Verb RunAs"
-            Write-Log "Encoding elevation command"
-            $elevationEncoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($elevationCmd))
-            Write-Log "Elevation command encoded (length: $($elevationEncoded.Length))"
-            
-            $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $elevationEncoded"
-            Write-Log "Arguments set (length: $($Shortcut.Arguments.Length))"
-            $Shortcut.Description = "Activate Windows"
-            $Shortcut.WorkingDirectory = "$env:SystemRoot\System32"
-            $Shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,27"
-            
-            Write-Log "Saving shortcut to: $shortcutPath"
-            $Shortcut.Save()
-            Write-Log "Shortcut saved successfully"
-            
-            # Verify shortcut was created
-            if (Test-Path -Path $shortcutPath) {
-                $shortcutInfo = Get-Item -Path $shortcutPath
-                Write-Log "Shortcut file verified - Size: $($shortcutInfo.Length) bytes, Created: $($shortcutInfo.CreationTime)"
-            } else {
-                Write-Log "ERROR: Shortcut file was not created at: $shortcutPath"
-            }
-
-            # Set the "Run as administrator" flag on the shortcut
-            Write-Log "Setting 'Run as administrator' flag on shortcut"
-            $bytes = [System.IO.File]::ReadAllBytes($shortcutPath)
-            Write-Log "Read shortcut file bytes (length: $($bytes.Length))"
-            if ($bytes.Length -gt 0x15) {
-                $bytes[0x15] = $bytes[0x15] -bor 0x20
-                [System.IO.File]::WriteAllBytes($shortcutPath, $bytes)
-                Write-Log "Administrator flag set successfully"
-            } else {
-                Write-Log "WARNING: Shortcut file too small to set administrator flag (length: $($bytes.Length))"
-            }
-
-            # Final verification
-            $finalCheck = Get-ChildItem -Path $userDesktop -Filter "*.lnk" -ErrorAction SilentlyContinue
-            Write-Log "Final desktop .lnk files count: $($finalCheck.Count)"
-            if ($finalCheck.Count -gt 0) {
-                Write-Log "Final desktop .lnk files: $($finalCheck.Name -join ', ')"
-            }
-            
-            if (Test-Path -Path $shortcutPath) {
-                Write-Log "SUCCESS: Activation shortcut created successfully at: $shortcutPath"
-                Write-Host "Activation shortcut created on user desktop"
-            } else {
-                Write-Log "ERROR: Activation shortcut was not found after creation attempt"
-            }
-        } else {
-            Write-Log "ERROR: Desktop path does not exist: $userDesktop"
-            Write-Log "Cannot create activation shortcut - desktop path unavailable"
-        }
-    } catch {
-        Write-Log "ERROR: Exception occurred while creating activation shortcut: $_"
-        Write-Log "ERROR: Exception type: $($_.Exception.GetType().FullName)"
-        Write-Log "ERROR: Exception message: $($_.Exception.Message)"
-        Write-Log "ERROR: Stack trace: $($_.ScriptStackTrace)"
-        Write-Host "Warning: Could not create activation shortcut: $_"
-    }
-    Write-Log "=== Activation Shortcut Creation Completed ==="
-
-'@
-        $firstRun += $activationShortcutCode
-    }
 
     $firstRun | Out-File -FilePath "$env:temp\FirstStartup.ps1" -Force
 }
