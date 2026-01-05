@@ -7266,9 +7266,22 @@ function Invoke-WPFPresets {
                     # Fallback: use checkboxName directly (already has WPFInstall prefix)
                     $checkboxName
                 }
-                if ($appKey -and -not ($sync.selectedApps -contains $appKey)) {
-                    $sync.selectedApps.Add($appKey)
-                    [System.Collections.Generic.List[pscustomobject]]$sync.selectedApps = $sync.selectedApps | Sort-Object
+                if ($appKey) {
+                    # Ensure selectedApps is a List[string] and check for duplicates properly
+                    if (-not $sync.selectedApps) {
+                        $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+                    }
+                    # Convert to string list if needed for proper comparison
+                    $currentApps = @($sync.selectedApps | ForEach-Object { [string]$_ })
+                    if (-not ($currentApps -contains [string]$appKey)) {
+                        $sync.selectedApps.Add([string]$appKey)
+                        # Sort but keep as List[string]
+                        $sortedApps = $sync.selectedApps | Sort-Object
+                        $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+                        foreach ($app in $sortedApps) {
+                            $sync.selectedApps.Add([string]$app)
+                        }
+                    }
                 }
             }
         } else {
@@ -17108,8 +17121,17 @@ $sync["Form"].Add_ContentRendered({
 
             Write-Host "Installing applications..."
             Write-Host "Selected apps count: $($sync.selectedApps.Count)"
+            Write-Host "ProcessRunning status: $($sync.ProcessRunning)" -ForegroundColor Yellow
             if ($sync.selectedApps.Count -gt 0) {
+                # Remove duplicates from selectedApps (in case Invoke-WPFPresets added them)
+                $uniqueApps = $sync.selectedApps | Select-Object -Unique
+                $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+                foreach ($app in $uniqueApps) {
+                    $sync.selectedApps.Add($app)
+                }
+                Write-Host "After deduplication - Selected apps count: $($sync.selectedApps.Count)" -ForegroundColor Cyan
                 Write-Host "Selected apps: $($sync.selectedApps -join ', ')"
+
                 # Build packages list directly from selectedApps and applicationsHashtable
                 $packagesToInstall = @()
                 foreach ($appKey in $sync.selectedApps) {
@@ -17117,18 +17139,31 @@ $sync["Form"].Add_ContentRendered({
                         $packagesToInstall += $sync.configs.applicationsHashtable.$appKey
                         Write-Host "Added package: $($sync.configs.applicationsHashtable.$appKey.Content)"
                     } else {
-                        Write-Host "WARNING: App key '$appKey' not found in applicationsHashtable"
+                        Write-Host "WARNING: App key '$appKey' not found in applicationsHashtable" -ForegroundColor Red
                     }
                 }
-                Write-Host "Packages to install count: $($packagesToInstall.Count)"
+                Write-Host "Packages to install count: $($packagesToInstall.Count)" -ForegroundColor Green
 
-                if ($packagesToInstall.Count -gt 0 -and -not $sync.ProcessRunning) {
-                    Invoke-WPFInstall -PackagesToInstall $packagesToInstall
-                    while ($sync.ProcessRunning) {
-                        Start-Sleep -Seconds 1
+                # Wait a bit more to ensure ProcessRunning is cleared
+                $waitCount = 0
+                while ($sync.ProcessRunning -and $waitCount -lt 10) {
+                    Write-Host "Waiting for process to complete... ($waitCount/10)" -ForegroundColor Yellow
+                    Start-Sleep -Seconds 2
+                    $waitCount++
+                }
+
+                if ($packagesToInstall.Count -gt 0) {
+                    if (-not $sync.ProcessRunning) {
+                        Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
+                        Invoke-WPFInstall -PackagesToInstall $packagesToInstall
+                        while ($sync.ProcessRunning) {
+                            Start-Sleep -Seconds 1
+                        }
+                    } else {
+                        Write-Host "ERROR: ProcessRunning is still true after waiting. Cannot install packages." -ForegroundColor Red
                     }
                 } else {
-                    Write-Host "WARNING: No packages to install or process already running"
+                    Write-Host "WARNING: No packages to install (packages list is empty)" -ForegroundColor Yellow
                 }
             } else {
                 Write-Host "WARNING: No applications selected in config file"

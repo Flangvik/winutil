@@ -80,9 +80,22 @@ function Invoke-WPFPresets {
                     # Fallback: use checkboxName directly (already has WPFInstall prefix)
                     $checkboxName
                 }
-                if ($appKey -and -not ($sync.selectedApps -contains $appKey)) {
-                    $sync.selectedApps.Add($appKey)
-                    [System.Collections.Generic.List[pscustomobject]]$sync.selectedApps = $sync.selectedApps | Sort-Object
+                if ($appKey) {
+                    # Ensure selectedApps is a List[string] and check for duplicates properly
+                    if (-not $sync.selectedApps) {
+                        $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+                    }
+                    # Convert to string list if needed for proper comparison
+                    $currentApps = @($sync.selectedApps | ForEach-Object { [string]$_ })
+                    if (-not ($currentApps -contains [string]$appKey)) {
+                        $sync.selectedApps.Add([string]$appKey)
+                        # Sort but keep as List[string]
+                        $sortedApps = $sync.selectedApps | Sort-Object
+                        $sync.selectedApps = [System.Collections.Generic.List[string]]::new()
+                        foreach ($app in $sortedApps) {
+                            $sync.selectedApps.Add([string]$app)
+                        }
+                    }
                 }
             }
         } else {
