@@ -18,6 +18,9 @@ $InitialSessionState = [System.Management.Automation.Runspaces.InitialSessionSta
 # Add the variable to the session state
 $InitialSessionState.Variables.Add($hashVars)
 
+# Store PARAM_RUN in sync so functions can access it
+$sync.PARAM_RUN = $PARAM_RUN
+
 # Get every private function and add them to the session state
 $functions = Get-ChildItem function:\ | Where-Object { $_.Name -imatch 'winutil|Microwin|WPF' }
 foreach ($function in $functions) {
@@ -358,24 +361,6 @@ $sync["Form"].Add_ContentRendered({
             }
             Start-Sleep -Seconds 5
 
-            Write-Host "Applying tweaks..."
-            if (-not $sync.ProcessRunning) {
-                Invoke-WPFtweaksbutton
-                while ($sync.ProcessRunning) {
-                    Start-Sleep -Seconds 5
-                }
-            }
-            Start-Sleep -Seconds 5
-
-            Write-Host "Installing features..."
-            if (-not $sync.ProcessRunning) {
-                Invoke-WPFFeatureInstall
-                while ($sync.ProcessRunning) {
-                    Start-Sleep -Seconds 5
-                }
-            }
-            Start-Sleep -Seconds 5
-
             Write-Host "Installing applications..."
             Write-Host "Selected apps count: $($sync.selectedApps.Count)"
             Write-Host "ProcessRunning status: $($sync.ProcessRunning)" -ForegroundColor Yellow
@@ -419,26 +404,8 @@ $sync["Form"].Add_ContentRendered({
                 if ($packagesToInstall.Count -gt 0) {
                     if (-not $sync.ProcessRunning) {
                         Write-Host "Calling Invoke-WPFInstall with $($packagesToInstall.Count) packages..." -ForegroundColor Green
+                        # In run mode, Invoke-WPFInstall executes synchronously, so no waiting needed
                         Invoke-WPFInstall -PackagesToInstall $packagesToInstall
-
-                        # Wait for the runspace to start and set ProcessRunning to true
-                        $startWaitCount = 0
-                        while (-not $sync.ProcessRunning -and $startWaitCount -lt 5) {
-                            Write-Host "Waiting for installation to start... ($startWaitCount/5)" -ForegroundColor Yellow
-                            Start-Sleep -Seconds 1
-                            $startWaitCount++
-                        }
-
-                        # Now wait for the installation to complete
-                        if ($sync.ProcessRunning) {
-                            Write-Host "Installation started. Waiting for completion..." -ForegroundColor Green
-                            while ($sync.ProcessRunning) {
-                                Start-Sleep -Seconds 2
-                            }
-                            Write-Host "Installation completed." -ForegroundColor Green
-                        } else {
-                            Write-Host "WARNING: Installation did not start. ProcessRunning never became true." -ForegroundColor Yellow
-                        }
                     } else {
                         Write-Host "ERROR: ProcessRunning is still true after force reset. Cannot install packages." -ForegroundColor Red
                     }
@@ -447,6 +414,24 @@ $sync["Form"].Add_ContentRendered({
                 }
             } else {
                 Write-Host "WARNING: No applications selected in config file"
+            }
+            Start-Sleep -Seconds 5
+
+            Write-Host "Applying tweaks..."
+            if (-not $sync.ProcessRunning) {
+                Invoke-WPFtweaksbutton
+                while ($sync.ProcessRunning) {
+                    Start-Sleep -Seconds 5
+                }
+            }
+            Start-Sleep -Seconds 5
+
+            Write-Host "Installing features..."
+            if (-not $sync.ProcessRunning) {
+                Invoke-WPFFeatureInstall
+                while ($sync.ProcessRunning) {
+                    Start-Sleep -Seconds 5
+                }
             }
             Start-Sleep -Seconds 5
 

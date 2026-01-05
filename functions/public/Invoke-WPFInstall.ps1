@@ -53,14 +53,13 @@ function Invoke-WPFInstall {
     Write-Host "Package names: $($PackagesToInstall.Content -join ', ')" -ForegroundColor Cyan
 
     $ManagerPreference = $sync["ManagerPreference"]
-
-    Write-Host "Starting installation runspace..." -ForegroundColor Cyan
-
-    Invoke-WPFRunspace -ParameterList @(("PackagesToInstall", $PackagesToInstall),("ManagerPreference", $ManagerPreference)) -DebugPreference $DebugPreference -ScriptBlock {
-        param($PackagesToInstall, $ManagerPreference, $DebugPreference)
-
-        Write-Host "Installation runspace started. Processing packages..." -ForegroundColor Green
-
+    
+    # In run mode, execute directly instead of using async runspace
+    $isRunMode = $sync.PARAM_RUN -eq $true
+    
+    if ($isRunMode) {
+        Write-Host "Run mode detected - executing installation directly (synchronously)..." -ForegroundColor Green
+        
         $packagesSorted = Get-WinUtilSelectedPackages -PackageList $PackagesToInstall -Preference $ManagerPreference
 
         $packagesWinget = $packagesSorted[[PackageManagers]::Winget]
@@ -70,9 +69,8 @@ function Invoke-WPFInstall {
 
         try {
             $sync.ProcessRunning = $true
-            Write-Host "ProcessRunning set to true. Beginning installations..." -ForegroundColor Green
+            Write-Host "Beginning installations..." -ForegroundColor Green
             if($packagesWinget.Count -gt 0 -and $packagesWinget -ne "0") {
-                Show-WPFInstallAppBusy -text "Installing apps..."
                 Install-WinUtilWinget
                 Install-WinUtilProgramWinget -Action Install -Programs $packagesWinget
             }
@@ -80,17 +78,57 @@ function Invoke-WPFInstall {
                 Install-WinUtilChoco
                 Install-WinUtilProgramChoco -Action Install -Programs $packagesChoco
             }
-            Hide-WPFInstallAppBusy
             Write-Host "==========================================="
             Write-Host "--      Installs have finished          ---"
             Write-Host "==========================================="
-            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "None" -overlay "checkmark" })
         } catch {
             Write-Host "==========================================="
             Write-Host "Error: $_"
             Write-Host "==========================================="
-            $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Error" -overlay "warning" })
+        } finally {
+            $sync.ProcessRunning = $False
+            Write-Host "Installation process completed." -ForegroundColor Green
         }
-        $sync.ProcessRunning = $False
+    } else {
+        # GUI mode - use async runspace
+        Write-Host "GUI mode - starting installation runspace..." -ForegroundColor Cyan
+
+        Invoke-WPFRunspace -ParameterList @(("PackagesToInstall", $PackagesToInstall),("ManagerPreference", $ManagerPreference)) -DebugPreference $DebugPreference -ScriptBlock {
+            param($PackagesToInstall, $ManagerPreference, $DebugPreference)
+
+            Write-Host "Installation runspace started. Processing packages..." -ForegroundColor Green
+
+            $packagesSorted = Get-WinUtilSelectedPackages -PackageList $PackagesToInstall -Preference $ManagerPreference
+
+            $packagesWinget = $packagesSorted[[PackageManagers]::Winget]
+            $packagesChoco = $packagesSorted[[PackageManagers]::Choco]
+
+            Write-Host "Winget packages: $($packagesWinget.Count), Choco packages: $($packagesChoco.Count)" -ForegroundColor Cyan
+
+            try {
+                $sync.ProcessRunning = $true
+                Write-Host "ProcessRunning set to true. Beginning installations..." -ForegroundColor Green
+                if($packagesWinget.Count -gt 0 -and $packagesWinget -ne "0") {
+                    Show-WPFInstallAppBusy -text "Installing apps..."
+                    Install-WinUtilWinget
+                    Install-WinUtilProgramWinget -Action Install -Programs $packagesWinget
+                }
+                if($packagesChoco.Count -gt 0) {
+                    Install-WinUtilChoco
+                    Install-WinUtilProgramChoco -Action Install -Programs $packagesChoco
+                }
+                Hide-WPFInstallAppBusy
+                Write-Host "==========================================="
+                Write-Host "--      Installs have finished          ---"
+                Write-Host "==========================================="
+                $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "None" -overlay "checkmark" })
+            } catch {
+                Write-Host "==========================================="
+                Write-Host "Error: $_"
+                Write-Host "==========================================="
+                $sync.form.Dispatcher.Invoke([action]{ Set-WinUtilTaskbaritem -state "Error" -overlay "warning" })
+            }
+            $sync.ProcessRunning = $False
+        }
     }
 }
