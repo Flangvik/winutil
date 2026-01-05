@@ -330,7 +330,7 @@ function Microwin-NewFirstRun {
     } else {
         Write-Log "Desktop path for cleanup: $desktopPath"
         Write-Log "Desktop path exists: $(Test-Path -Path $desktopPath)"
-        
+
         if (Test-Path -Path $desktopPath) {
             $allDesktopFiles = Get-ChildItem -Path $desktopPath -ErrorAction SilentlyContinue
             Write-Log "Total files/folders on desktop before cleanup: $($allDesktopFiles.Count)"
@@ -346,7 +346,7 @@ function Microwin-NewFirstRun {
         # Log desktop contents but do not remove any .lnk files
         $edgeShortcutFiles = Get-ChildItem -Path $desktopPath -Filter "*Edge*.lnk" -ErrorAction SilentlyContinue
         Write-Log "Edge shortcut files found: $($edgeShortcutFiles.Count) (not removing)"
-        
+
         $allLnkFiles = Get-ChildItem -Path "$desktopPath\*.lnk" -ErrorAction SilentlyContinue
         Write-Log "Total .lnk files on desktop: $($allLnkFiles.Count) (preserving all shortcuts)"
         if ($allLnkFiles.Count -gt 0) {
@@ -365,7 +365,7 @@ function Microwin-NewFirstRun {
             break
         }
     }
-    
+
     if ($null -ne $defaultUserFolder) {
         $defaultDesktopPath = Join-Path $defaultUserFolder "Desktop"
         if (Test-Path -Path $defaultDesktopPath) {
@@ -377,7 +377,7 @@ function Microwin-NewFirstRun {
     } else {
         Write-Log "Default user folder not found in Users directory"
     }
-    
+
     Write-Log "=== Desktop Cleanup Completed ==="
 
     Write-Log "Checking for Recall feature"

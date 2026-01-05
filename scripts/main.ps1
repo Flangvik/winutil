@@ -391,7 +391,7 @@ $sync["Form"].Add_ContentRendered({
                     }
                 }
                 Write-Host "Packages to install count: $($packagesToInstall.Count)"
-                
+
                 if ($packagesToInstall.Count -gt 0 -and -not $sync.ProcessRunning) {
                     Invoke-WPFInstall -PackagesToInstall $packagesToInstall
                     while ($sync.ProcessRunning) {

@@ -48,7 +48,7 @@ function Invoke-WPFInstall {
         }
         return
     }
-    
+
     Write-Host "Invoke-WPFInstall called with $($PackagesToInstall.Count) packages to install" -ForegroundColor Green
     Write-Host "Package names: $($PackagesToInstall.Content -join ', ')" -ForegroundColor Cyan
 
