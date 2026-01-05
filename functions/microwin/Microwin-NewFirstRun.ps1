@@ -17,8 +17,7 @@ function Microwin-NewFirstRun {
         $defenderFolders = @(
             "$env:ProgramData\Microsoft\Windows Defender\Platform",
             "$env:ProgramFiles\Windows Defender",
-            "$env:ProgramFiles\Windows Defender Advanced Threat Protection",
-            "${env:ProgramFiles(x86)}\Windows Defender"
+            "$env:ProgramFiles\Windows Defender Advanced Threat Protection"
         )
 
         foreach ($folderPath in $defenderFolders) {
