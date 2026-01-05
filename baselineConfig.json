@@ -1,36 +1,4 @@
 {
-    "WPFTweaks":  [
-                      "WPFTweaksRestorePoint",
-                      "WPFTweaksRazerBlock",
-                      "WPFTweaksRightClickMenu",
-                      "WPFTweaksActivity",
-                      "WPFTweaksMakeEdgeUninstallable",
-                      "WPFTweaksStorage",
-                      "WPFTweaksHiber",
-                      "WPFTweaksRemoveHome",
-                      "WPFTweaksIPv46",
-                      "WPFTweaksConsumerFeatures",
-                      "WPFTweaksDVR",
-                      "WPFTweaksRemoveGallery",
-                      "WPFTweaksTele",
-                      "WPFTweaksLocation",
-                      "WPFTweaksDisplay",
-                      "WPFTweaksEndTaskOnTaskbar",
-                      "WPFTweaksBlockAdobeNet",
-                      "WPFTweaksEdgeDebloat",
-                      "WPFTweaksRemoveCopilot",
-                      "WPFTweaksDiskCleanup",
-                      "WPFTweaksDisableExplorerAutoDiscovery",
-                      "WPFTweaksBraveDebloat",
-                      "WPFTweaksDisableIPv6",
-                      "WPFTweaksDisableNotifications",
-                      "WPFTweaksTeredo",
-                      "WPFTweaksPowershell7Tele",
-                      "WPFTweaksDeleteTempFiles",
-                      "WPFTweaksDisableBGapps",
-                      "WPFTweaksPowershell7",
-                      "WPFTweaksServices"
-                  ],
     "Install":  [
                     {
                         "winget":  "7zip.7zip",
@@ -41,16 +9,20 @@
                         "choco":  "librewolf"
                     },
                     {
+                        "winget":  "StartIsBack.StartAllBack",
+                        "choco":  "startallback"
+                    },
+                    {
                         "winget":  "Microsoft.VCRedist.2015+.x86",
                         "choco":  "na"
                     },
                     {
-                        "winget":  "Python.Python.3.13",
-                        "choco":  "python"
-                    },
-                    {
                         "winget":  "Microsoft.SQLServerManagementStudio",
                         "choco":  "sql-server-management-studio"
+                    },
+                    {
+                        "winget":  "Kitware.CMake",
+                        "choco":  "cmake"
                     },
                     {
                         "winget":  "Foxit.FoxitReader",
@@ -59,6 +31,10 @@
                     {
                         "winget":  "Microsoft.VisualStudio.2022.Community",
                         "choco":  "visualstudio2022community"
+                    },
+                    {
+                        "winget":  "Armin2208.WindowsAutoNightMode",
+                        "choco":  "auto-dark-mode"
                     },
                     {
                         "winget":  "Microsoft.VCRedist.2015+.x64",
@@ -75,21 +51,67 @@
                     {
                         "winget":  "Git.Git",
                         "choco":  "git"
+                    },
+                    {
+                        "winget":  "MHNexus.HxD",
+                        "choco":  "HxD"
+                    },
+                    {
+                        "winget":  "Open-Shell.Open-Shell-Menu",
+                        "choco":  "open-shell"
                     }
                 ],
     "WPFInstall":  [
                        "WPFInstall7zip",
                        "WPFInstalllibrewolf",
+                       "WPFInstallstartallback",
                        "WPFInstallvc2015_32",
-                       "WPFInstallpython3",
                        "WPFInstallsqlmanagementstudio",
+                       "WPFInstallcmake",
                        "WPFInstallfoxpdfreader",
                        "WPFInstallvisualstudio",
+                       "WPFInstallautodarkmode",
                        "WPFInstallvc2015_64",
                        "WPFInstallvlc",
                        "WPFInstallvscode",
-                       "WPFInstallgit"
+                       "WPFInstallgit",
+                       "WPFInstallxeheditor",
+                       "WPFInstallopenshell"
                    ],
+    "ManagerPreference":  1,
+    "WPFTweaks":  [
+                      "WPFTweaksRestorePoint",
+                      "WPFTweaksRazerBlock",
+                      "WPFTweaksRightClickMenu",
+                      "WPFTweaksActivity",
+                      "WPFTweaksStorage",
+                      "WPFTweaksHiber",
+                      "WPFTweaksRemoveHome",
+                      "WPFTweaksIPv46",
+                      "WPFTweaksConsumerFeatures",
+                      "WPFTweaksDVR",
+                      "WPFTweaksRemoveGallery",
+                      "WPFTweaksTele",
+                      "WPFTweaksLocation",
+                      "WPFTweaksDisplay",
+                      "WPFTweaksEndTaskOnTaskbar",
+                      "WPFTweaksBlockAdobeNet",
+                      "WPFTweaksEdgeDebloat",
+                      "WPFTweaksRemoveCopilot",
+                      "WPFTweaksDiskCleanup",
+                      "WPFTweaksDisableExplorerAutoDiscovery",
+                      "WPFTweaksDisableIPv6",
+                      "WPFTweaksDisableNotifications",
+                      "WPFTweaksTeredo",
+                      "WPFTweaksPowershell7Tele",
+                      "WPFTweaksDeleteTempFiles",
+                      "WPFTweaksDisableBGapps",
+                      "WPFTweaksPowershell7",
+                      "WPFTweaksServices"
+                  ],
+    "MicroWin":  [
+                     "MicroWinNoFLA"
+                 ],
     "WPFFeature":  [
                        "WPFFeaturesdotnet"
                    ]
